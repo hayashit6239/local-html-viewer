@@ -1,0 +1,22 @@
+# ビルド生成物
+.build/
+dist/
+*.iconset/
+
+# SwiftPM / エディタ
+.swiftpm/
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# 機密になりうるもの(本プロジェクトでは存在しないはずだが構造的に排除)
+.env
+.env.*
+*.pem
+*.p12
+*.key
+
+# Claude Code ローカル設定
+.claude/settings.local.json
