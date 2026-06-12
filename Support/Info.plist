@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- TCC・Launch Services のアイデンティティ。一度決めたら変えない -->
+	<key>CFBundleIdentifier</key>
+	<string>com.hayashi.htmlviewer</string>
+	<!-- open -a の名前解決に使われる。スペースなしにして hook を単純化 -->
+	<key>CFBundleName</key>
+	<string>HTMLViewer</string>
+	<key>CFBundleDisplayName</key>
+	<string>HTML Viewer</string>
+	<!-- Contents/MacOS/ のバイナリ名と完全一致必須 -->
+	<key>CFBundleExecutable</key>
+	<string>HTMLViewer</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<!-- open -a / -b でファイルを受けるために必須。
+	     LSHandlerRank=Alternate でブラウザからデフォルトハンドラを奪わない -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>HTML Document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.html</string>
+			</array>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+		</dict>
+	</array>
+	<!-- フォルダアクセスの TCC プロンプトに表示される説明文(M3 の走査で使用) -->
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>登録フォルダ内の HTML ファイルを一覧・表示するために使用します。</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>登録フォルダ内の HTML ファイルを一覧・表示するために使用します。</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>登録フォルダ内の HTML ファイルを一覧・表示するために使用します。</string>
+</dict>
+</plist>
