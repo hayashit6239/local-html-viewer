@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>案B — アンバー × macOS ネイティブ・ハイブリッド</title>
+<style>
+  :root {
+    --bg: #1d1b20;
+    --sidebar: rgba(36, 33, 40, 0.92);
+    --bg-inset: #161419;
+    --amber: #e8a13c;
+    --amber-soft: rgba(232,161,60,.16);
+    --text: #e6e2d8;
+    --text-dim: #98948b;
+    --text-faint: #5d5a54;
+    --live: #8fce5a;
+    --line: rgba(255,255,255,.07);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(100% 80% at 70% 10%, #3a3144 0%, #241f2c 40%, #14111a 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; padding: 32px;
+  }
+  .mono { font-family: "SF Mono", Menlo, ui-monospace, monospace; }
+
+  .variant-tag { color: #9a948a; font-size: 12px; letter-spacing: .04em; font-family: "SF Mono", Menlo, monospace; }
+  .variant-tag b { color: var(--amber); font-weight: 500; }
+  .variant-tag a { color: #6e6a60; text-decoration: none; margin-left: 14px; }
+  .variant-tag a:hover { color: var(--amber); }
+
+  /* ─── macOS window ─── */
+  .window {
+    width: 1180px; height: 720px; max-width: 96vw; max-height: 82vh;
+    background: var(--bg);
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 12px;
+    box-shadow: 0 34px 90px rgba(0,0,0,.6), 0 4px 18px rgba(0,0,0,.45);
+    display: flex; overflow: hidden;
+  }
+
+  /* ─── sidebar (vibrancy 風) ─── */
+  .sidebar {
+    width: 300px; flex: none; display: flex; flex-direction: column;
+    background: linear-gradient(160deg, rgba(48,42,56,.85), rgba(30,27,35,.95));
+    backdrop-filter: blur(20px);
+    border-right: 1px solid var(--line);
+  }
+  .traffic { display: flex; gap: 8px; padding: 16px 16px 12px; }
+  .traffic i { width: 12px; height: 12px; border-radius: 50%; }
+  .traffic i:nth-child(1) { background: #ff5f57; }
+  .traffic i:nth-child(2) { background: #febc2e; }
+  .traffic i:nth-child(3) { background: #28c840; }
+
+  .search {
+    margin: 4px 12px 14px; background: rgba(0,0,0,.28);
+    border: 1px solid var(--line); border-radius: 7px;
+    padding: 6px 10px; display: flex; align-items: center; gap: 7px;
+    font-size: 12.5px; color: var(--text-faint);
+  }
+  .search svg { width: 12px; height: 12px; stroke: var(--text-faint); fill: none; stroke-width: 2; }
+  .search .key { margin-left: auto; background: rgba(255,255,255,.06); border-radius: 4px; padding: 1px 6px; font-size: 10px; color: var(--text-dim); font-family: "SF Mono", Menlo, monospace; }
+
+  .sect { padding: 2px 18px 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; color: var(--text-faint); text-transform: uppercase; display: flex; align-items: center; }
+  .sect .plus { margin-left: auto; color: var(--text-dim); font-size: 13px; font-weight: 400; }
+  .folder { display: flex; align-items: center; gap: 8px; padding: 5px 16px; font-size: 12.5px; color: var(--text-dim); }
+  .folder .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--live); box-shadow: 0 0 5px rgba(143,206,90,.6); animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .4; } }
+  .folder .icon { color: var(--amber); font-size: 12px; }
+
+  .seg {
+    display: flex; margin: 12px 12px 8px; background: rgba(0,0,0,.3);
+    border-radius: 7px; padding: 2px; font-size: 11.5px;
+  }
+  .seg div { flex: 1; text-align: center; padding: 4px 0; border-radius: 5px; color: var(--text-dim); }
+  .seg .on { background: rgba(255,255,255,.1); color: var(--text); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+
+  .list { flex: 1; overflow: hidden; padding: 2px 8px; }
+  .row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 7px; font-size: 12.5px; color: var(--text);
+  }
+  .row .fico { color: var(--text-faint); font-size: 11px; flex: none; }
+  .row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: "SF Mono", Menlo, monospace; font-size: 11.5px; }
+  .row .mtime { margin-left: auto; color: var(--text-faint); font-size: 10.5px; flex: none; }
+  .row.selected { background: var(--amber-soft); }
+  .row.selected .name { color: var(--amber); }
+  .row.selected .fico { color: var(--amber); }
+  .row:hover:not(.selected) { background: rgba(255,255,255,.05); }
+  .badge { font-size: 9px; letter-spacing: .06em; color: var(--live); background: rgba(143,206,90,.12); padding: 1px 5px; border-radius: 8px; flex: none; font-weight: 600; }
+
+  .sidefoot { border-top: 1px solid var(--line); padding: 10px 16px; font-size: 10.5px; color: var(--text-faint); display: flex; align-items: center; gap: 6px; }
+  .sidefoot .livedot { width: 6px; height: 6px; border-radius: 50%; background: var(--live); }
+
+  /* ─── main ─── */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  .topbar {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+  }
+  .crumb { display: flex; align-items: baseline; gap: 7px; font-size: 12px; color: var(--text-dim); min-width: 0; }
+  .crumb .file { color: var(--text); font-weight: 600; font-size: 13px; }
+  .crumb .in { color: var(--text-faint); font-size: 11px; }
+  .crumb .dirpath { font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .actions { margin-left: auto; display: flex; gap: 6px; flex: none; }
+  .actions span {
+    height: 26px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,.06); border-radius: 6px;
+    color: var(--text-dim); font-size: 11.5px;
+  }
+  .actions span:hover { color: var(--amber); background: rgba(232,161,60,.12); }
+  .actions .glyph { font-size: 13px; }
+
+  .preview-wrap { flex: 1; padding: 14px; min-height: 0; }
+  .preview {
+    height: 100%; background: #ffffff; border-radius: 9px; overflow: hidden;
+    box-shadow: 0 2px 14px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.06);
+    position: relative;
+  }
+
+  /* fake artifact */
+  .artifact { font-family: -apple-system, "Helvetica Neue", sans-serif; color: #1d2025; padding: 40px 52px; }
+  .artifact h1 { font-size: 25px; letter-spacing: -.02em; margin-bottom: 4px; }
+  .artifact .sub { color: #8a909a; font-size: 13px; margin-bottom: 26px; }
+  .habits { display: flex; flex-direction: column; gap: 17px; max-width: 560px; }
+  .habit .label { font-size: 13px; font-weight: 600; margin-bottom: 7px; display: flex; justify-content: space-between; }
+  .habit .label em { font-style: normal; color: #e8762d; font-size: 12px; }
+  .cells { display: grid; grid-template-columns: repeat(21, 1fr); gap: 4px; }
+  .cells i { aspect-ratio: 1; border-radius: 3px; background: #eef0f3; }
+  .cells i.on1 { background: #ffd9a8; } .cells i.on2 { background: #f5a854; } .cells i.on3 { background: #e8762d; }
+
+  .toast {
+    position: absolute; right: 14px; bottom: 14px;
+    background: rgba(40,37,46,.96); color: var(--text);
+    border: 1px solid rgba(255,255,255,.1);
+    font-size: 11.5px; padding: 8px 14px; border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.4);
+    display: flex; align-items: center; gap: 8px;
+    animation: slidein .4s cubic-bezier(.2,.9,.3,1) both .8s;
+  }
+  @keyframes slidein { from { opacity: 0; transform: translateY(10px); } }
+  .toast .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--live); }
+  .toast code { font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; color: var(--amber); }
+</style>
+</head>
+<body>
+
+<div class="variant-tag">
+  案 <b>B</b> — アンバー × macOS ネイティブ・ハイブリッド(vibrancy / SF Pro + mono 併用)
+</div>
+
+<div class="window">
+  <aside class="sidebar">
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <div class="search">
+      <svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="M15 15l5 5"/></svg>
+      検索 <span class="key">/</span>
+    </div>
+    <div class="sect">フォルダ <span class="plus">＋</span></div>
+    <div class="folder"><span class="icon">▸</span>claude <span class="dot" style="margin-left:auto"></span></div>
+    <div class="folder"><span class="icon">▸</span>artifacts <span class="dot" style="margin-left:auto"></span></div>
+    <div class="seg"><div class="on">最近</div><div>ツリー</div></div>
+    <div class="list">
+      <div class="row selected"><span class="fico">◆</span><span class="name">habit-tracker.html</span><span class="badge">更新</span><span class="mtime">2分前</span></div>
+      <div class="row"><span class="fico">◇</span><span class="name">sales-dashboard.html</span><span class="mtime">18分前</span></div>
+      <div class="row"><span class="fico">◇</span><span class="name">tokyo-trip-plan.html</span><span class="mtime">1時間前</span></div>
+      <div class="row"><span class="fico">◇</span><span class="name">spec-html-viewer.html</span><span class="mtime">3時間前</span></div>
+      <div class="row"><span class="fico">◇</span><span class="name">sub/team-okr.html</span><span class="mtime">5時間前</span></div>
+      <div class="row"><span class="fico">◇</span><span class="name">retro-board.html</span><span class="mtime">昨日</span></div>
+      <div class="row"><span class="fico">◇</span><span class="name">resume-draft.html</span><span class="mtime">2日前</span></div>
+      <div class="row"><span class="fico">◇</span><span class="name">color-palette-tool.html</span><span class="mtime">3日前</span></div>
+      <div class="row"><span class="fico">◇</span><span class="name">notes/meeting-notes.html</span><span class="mtime">4日前</span></div>
+    </div>
+    <div class="sidefoot"><span class="livedot"></span> 14 ファイルを監視中</div>
+  </aside>
+
+  <section class="main">
+    <div class="topbar">
+      <div class="crumb">
+        <span class="file">habit-tracker.html</span>
+        <span class="in">in</span>
+        <span class="dirpath">~/Codes/claude</span>
+      </div>
+      <div class="actions">
+        <span><i class="glyph">⟳</i> 再読込</span>
+        <span><i class="glyph">⌖</i> Finder</span>
+        <span><i class="glyph">↗</i> ブラウザ</span>
+      </div>
+    </div>
+    <div class="preview-wrap">
+      <div class="preview">
+        <div class="artifact">
+          <h1>Habit Tracker</h1>
+          <div class="sub">June 2026 — 3 habits, 21 days</div>
+          <div class="habits">
+            <div class="habit">
+              <div class="label">Morning run <em>12 day streak</em></div>
+              <div class="cells"><i class=on2></i><i class=on3></i><i></i><i class=on1></i><i class=on2></i><i class=on3></i><i class=on3></i><i></i><i class=on2></i><i class=on1></i><i class=on3></i><i class=on2></i><i class=on3></i><i class=on3></i><i class=on1></i><i class=on2></i><i class=on3></i><i class=on2></i><i class=on3></i><i class=on3></i><i class=on2></i></div>
+            </div>
+            <div class="habit">
+              <div class="label">Reading 30min <em>5 day streak</em></div>
+              <div class="cells"><i class=on1></i><i></i><i class=on2></i><i class=on1></i><i></i><i class=on1></i><i class=on2></i><i class=on1></i><i></i><i></i><i class=on1></i><i class=on2></i><i></i><i class=on1></i><i class=on1></i><i></i><i class=on1></i><i class=on2></i><i class=on1></i><i class=on1></i><i class=on1></i></div>
+            </div>
+            <div class="habit">
+              <div class="label">No late snacks <em>3 day streak</em></div>
+              <div class="cells"><i></i><i class=on1></i><i class=on1></i><i></i><i></i><i class=on2></i><i class=on1></i><i></i><i class=on1></i><i></i><i class=on1></i><i></i><i></i><i class=on1></i><i class=on2></i><i class=on1></i><i></i><i></i><i class=on1></i><i class=on1></i><i class=on1></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="toast"><span class="dot"></span><code>habit-tracker.html</code> を再読込しました</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="variant-tag" style="font-size:11px">
+  特徴: macOS の作法(vibrancy サイドバー・セグメント・角丸・SF Pro)に琥珀のアクセント。ファイル名のみ mono。プレビューはカード状に浮かせ「アプリの中の書類」感を出す。
+</div>
+
+</body>
+</html>
