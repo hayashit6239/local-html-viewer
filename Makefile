@@ -1,7 +1,27 @@
 # HTMLViewer — ビルド・検証タスク
-# build / test / install / run は M1 / M2 で追加する
+# install(.app バンドル組み立て)は M2 で追加する
 
-.PHONY: check
+.PHONY: build test run check
+
+# CLT 環境では swift test に Testing.framework の検索パスが自動で渡らないため明示する
+# (素の `swift test` は "no such module 'Testing'" で失敗する — docs/03-implementation.md §5)
+TESTING_FW := /Library/Developer/CommandLineTools/Library/Developer/Frameworks
+TESTING_LIB := /Library/Developer/CommandLineTools/Library/Developer/usr/lib
+TEST_FLAGS := -Xswiftc -F$(TESTING_FW) \
+	-Xlinker -F$(TESTING_FW) \
+	-Xlinker -rpath -Xlinker $(TESTING_FW) \
+	-Xlinker -rpath -Xlinker $(TESTING_LIB)
+
+build:
+	swift build
+
+test:
+	swift test $(TEST_FLAGS)
+
+# 開発用の直接実行。オープンイベント / TCC / UserDefaults の検証には使えない
+# (バンドル版と挙動が異なる — docs/03-implementation.md §4)
+run:
+	swift run
 
 # セキュリティ検査(.claude/rules/security.md の機械的検証)
 # - 実パス([/]Users[/] — パターン自体が自己マッチしないよう文字クラスで表記)の混入検知
