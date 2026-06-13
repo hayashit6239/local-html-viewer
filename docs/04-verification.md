@@ -22,7 +22,7 @@
 | M | 内容 | 検証ゴール | 結果 |
 |---|---|---|---|
 | M0 | リポジトリ統治 + docs 基盤 | `make check` が 0 / 初回コミットに統治・docs のみ | ✅ 2026-06-12 |
-| M1 | SPM 3 ターゲット + 空ウィンドウ + ダミーテスト | `swift build && swift run` でウィンドウ表示 / `swift test` が 0(Swift Testing の CLT 動作確認。不可なら XCTest へ即フォールバック) | — |
+| M1 | SPM 3 ターゲット + 空ウィンドウ + ダミーテスト | `swift build && swift run` でウィンドウ表示 / `make test` が 0(Swift Testing の CLT 動作確認) | ✅ 2026-06-12(素の `swift test` は CLT で不動作 → `make test` にフラグ固定化。詳細: 03 §5 M1) |
 | M2 | Info.plist + build.sh + Makefile 拡張 | `make install && open -a HTMLViewer` で起動 / `codesign -dv` が通る | — |
 | M2.5 | オープンイベント受信スモーク(最大リスク前倒し) | 未起動で `open -b com.hayashi.htmlviewer /tmp/t.html` → 受信パスが表示される / 起動中再実行でプロセス数 1(`pgrep -x HTMLViewer \| wc -l`) | — |
 | M3 | 走査 + RECENT リスト + フォルダ登録永続化 | 登録 → mtime 降順表示 / 再起動で保持 / node_modules 除外 / `swift test` 0 | — |
