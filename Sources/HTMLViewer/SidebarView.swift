@@ -81,15 +81,21 @@ struct SidebarView: View {
     }
 
     private func folderRow(_ folder: URL) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: "folder")
+        let reachable = app.isReachable(folder)
+        return HStack(spacing: 7) {
+            Image(systemName: reachable ? "folder" : "folder.badge.questionmark")
                 .font(.system(size: 10))
-                .foregroundStyle(Theme.amber)
+                .foregroundStyle(reachable ? Theme.amber : Theme.textFaint)
             Text(folder.lastPathComponent)
                 .font(.system(size: 12))
-                .foregroundStyle(Theme.textDim)
+                .foregroundStyle(reachable ? Theme.textDim : Theme.textFaint)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            if !reachable {
+                Text("見つかりません")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(Theme.textFaint)
+            }
             Spacer(minLength: 4)
             Button {
                 app.removeFolder(folder)

@@ -50,6 +50,13 @@ final class AppState {
         rescan()
     }
 
+    /// 登録フォルダが現在到達可能か(削除/移動/外付け unmount の検出)。
+    /// 到達不能でも登録は維持し(一時的な unmount で登録を失わない)、UI に stale 表示する。
+    func isReachable(_ url: URL) -> Bool {
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+    }
+
     /// 登録フォルダ群を再走査してリストを差し替える。重い走査は detached で UI を止めない。
     func rescan() {
         let roots = folders

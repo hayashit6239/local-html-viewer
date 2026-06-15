@@ -18,9 +18,10 @@ public enum FolderScanner {
     public static func scan(roots: [URL], maxFiles: Int = IgnoreRules.maxFiles) -> ScanResult {
         let fm = FileManager.default
         var files: [HTMLFile] = []
+        var seenPaths = Set<String>()
 
         for root in roots {
-            let keys: [URLResourceKey] = [.contentModificationDateKey, .isDirectoryKey]
+            let keys: [URLResourceKey] = [.contentModificationDateKey, .isDirectoryKey, .isSymbolicLinkKey]
             guard let enumerator = fm.enumerator(
                 at: root,
                 includingPropertiesForKeys: keys,
@@ -35,6 +36,13 @@ public enum FolderScanner {
             for case let url as URL in enumerator {
                 let values = try? url.resourceValues(forKeys: Set(keys))
 
+                // symlink は追従しない(サイクルによる無限走査・symlink 経由の ignore 回避を防ぐ)。
+                // FileManager の既定でも追従しないが、版依存の挙動に頼らず明示的にスキップする。
+                if values?.isSymbolicLink == true {
+                    enumerator.skipDescendants()
+                    continue
+                }
+
                 if values?.isDirectory == true {
                     if IgnoreRules.shouldSkipDirectory(url.lastPathComponent) {
                         enumerator.skipDescendants()
@@ -44,9 +52,8 @@ public enum FolderScanner {
 
                 guard IgnoreRules.isHTMLFile(url.lastPathComponent) else { continue }
 
-                if files.count >= maxFiles {
-                    return ScanResult(files: files, truncated: true)
-                }
+                // クロスフォルダ / 入れ子登録(A と A/sub)の重複を絶対パスで除去する
+                guard seenPaths.insert(url.path).inserted else { continue }
 
                 files.append(
                     HTMLFile(
@@ -60,6 +67,12 @@ public enum FolderScanner {
             }
         }
 
+        // 上限超過時は mtime 降順で上位 N を保持し、打ち切りを決定論的にする。
+        // (走査順の先着打ち切りは非決定的で、新しい=探しているファイルが落ちうるため)
+        if files.count > maxFiles {
+            let kept = Array(RecentSorter.sortedByModificationDateDescending(files).prefix(maxFiles))
+            return ScanResult(files: kept, truncated: true)
+        }
         return ScanResult(files: files, truncated: false)
     }
 

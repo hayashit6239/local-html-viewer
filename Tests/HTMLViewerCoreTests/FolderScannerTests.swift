@@ -87,13 +87,50 @@ struct FolderScannerTests {
         )
     }
 
-    @Test("maxFiles を超えたら打ち切る")
-    func truncatesAtMaxFiles() throws {
+    @Test("maxFiles を超えたら mtime 降順で上位 N を決定論的に保持する")
+    func truncatesToNewestN() throws {
         let root = try makeTree(["a.html", "b.html", "c.html", "d.html", "e.html"])
         defer { try? FileManager.default.removeItem(at: root) }
 
+        // mtime: e > d > c > b > a
+        try setMtime(root.appendingPathComponent("a.html"), 1_000)
+        try setMtime(root.appendingPathComponent("b.html"), 2_000)
+        try setMtime(root.appendingPathComponent("c.html"), 3_000)
+        try setMtime(root.appendingPathComponent("d.html"), 4_000)
+        try setMtime(root.appendingPathComponent("e.html"), 5_000)
+
         let result = FolderScanner.scan(roots: [root], maxFiles: 3)
-        #expect(result.files.count == 3)
         #expect(result.truncated)
+        // 走査順に依存せず、必ず新しい 3 件
+        #expect(Set(result.files.map(\.name)) == ["e.html", "d.html", "c.html"])
+    }
+
+    @Test("入れ子登録(A と A/sub)でも同一ファイルを重複させない")
+    func dedupesNestedRoots() throws {
+        let root = try makeTree(["a.html", "sub/b.html"])
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let result = FolderScanner.scan(roots: [root, root.appendingPathComponent("sub")])
+        #expect(result.files.map(\.name).sorted() == ["a.html", "b.html"])
+        #expect(result.files.filter { $0.name == "b.html" }.count == 1)
+    }
+
+    @Test("symlink を追従しない(ディレクトリ symlink 経由で外部に出ない)")
+    func doesNotFollowSymlinks() throws {
+        let fm = FileManager.default
+        let root = try makeTree(["inside.html"])
+        defer { try? fm.removeItem(at: root) }
+
+        // root の外にあるディレクトリ(追従したら拾えてしまう)
+        let external = fm.temporaryDirectory.appendingPathComponent("htmlviewer-ext-\(UUID().uuidString)")
+        try fm.createDirectory(at: external, withIntermediateDirectories: true)
+        try Data("<html></html>".utf8).write(to: external.appendingPathComponent("secret.html"))
+        defer { try? fm.removeItem(at: external) }
+
+        // root 内から external へのディレクトリ symlink
+        try fm.createSymbolicLink(at: root.appendingPathComponent("link"), withDestinationURL: external)
+
+        let result = FolderScanner.scan(roots: [root])
+        #expect(Set(result.files.map(\.name)) == ["inside.html"])
     }
 }
