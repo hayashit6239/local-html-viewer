@@ -1,7 +1,6 @@
 # HTMLViewer — ビルド・検証タスク
-# install(.app バンドル組み立て)は M2 で追加する
 
-.PHONY: build test run check
+.PHONY: build test run install check
 
 # CLT 環境では swift test に Testing.framework の検索パスが自動で渡らないため明示する
 # (素の `swift test` は "no such module 'Testing'" で失敗する — docs/03-implementation.md §5)
@@ -29,6 +28,10 @@ test:
 # (バンドル版と挙動が異なる — docs/03-implementation.md §4)
 run:
 	swift run
+
+# .app 組み立て → ad-hoc 署名 → ~/Applications へ配置 → Launch Services 登録
+install:
+	bash scripts/build.sh
 
 # セキュリティ検査(.claude/rules/security.md の機械的検証)
 # - 実パス([/]Users[/] — パターン自体が自己マッチしないよう文字クラスで表記)の混入検知
