@@ -58,6 +58,35 @@ struct FolderScannerTests {
         #expect(file.name == "page.html")
     }
 
+    @Test("受け入れ条件: 走査→RECENT ソートで node_modules を除き mtime 降順になる")
+    func scanThenSortAcceptance() throws {
+        let fm = FileManager.default
+        let root = try makeTree([
+            "old.html",
+            "newest.html",
+            "mid.html",
+            "node_modules/pkg/ignored.html",
+        ])
+        defer { try? fm.removeItem(at: root) }
+
+        // mtime を制御(newest > mid > old)
+        try setMtime(root.appendingPathComponent("old.html"), 1_000)
+        try setMtime(root.appendingPathComponent("mid.html"), 2_000)
+        try setMtime(root.appendingPathComponent("newest.html"), 3_000)
+
+        let scanned = FolderScanner.scan(roots: [root]).files
+        let recent = RecentSorter.sortedByModificationDateDescending(scanned)
+
+        #expect(recent.map(\.name) == ["newest.html", "mid.html", "old.html"])
+    }
+
+    private func setMtime(_ url: URL, _ epoch: TimeInterval) throws {
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: epoch)],
+            ofItemAtPath: url.path
+        )
+    }
+
     @Test("maxFiles を超えたら打ち切る")
     func truncatesAtMaxFiles() throws {
         let root = try makeTree(["a.html", "b.html", "c.html", "d.html", "e.html"])

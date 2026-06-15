@@ -1,0 +1,120 @@
+import AppKit
+import HTMLViewerCore
+import SwiftUI
+
+/// 左サイドバー: 登録フォルダ管理 + RECENT リスト。
+struct SidebarView: View {
+    @Environment(AppState.self) private var app
+
+    var body: some View {
+        @Bindable var app = app
+
+        VStack(alignment: .leading, spacing: 0) {
+            // ── フォルダ ──
+            HStack {
+                Text("フォルダ")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.textFaint)
+                Spacer()
+                Button(action: pickFolder) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.textDim)
+                .help("フォルダを追加")
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
+
+            if app.folders.isEmpty {
+                Text("フォルダを追加してください")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.textFaint)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+            } else {
+                ForEach(app.folders, id: \.path) { folder in
+                    folderRow(folder)
+                }
+            }
+
+            Divider().overlay(Color.white.opacity(0.06)).padding(.vertical, 8)
+
+            // ── RECENT ──
+            Text("最近")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.textFaint)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 4)
+
+            List(selection: $app.selectedFile) {
+                ForEach(app.recentFiles) { file in
+                    FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
+                        .tag(Optional(file))
+                        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                        .listRowBackground(Color.clear)
+                }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+
+            // ── フッタ ──
+            Divider().overlay(Color.white.opacity(0.06))
+            HStack(spacing: 6) {
+                Circle().fill(Theme.live).frame(width: 6, height: 6)
+                Text(footerText)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.textFaint)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+        }
+        .background(Theme.background)
+    }
+
+    private var footerText: String {
+        var s = "\(app.recentFiles.count) ファイル"
+        if app.scanTruncated { s += "(上限到達)" }
+        return s
+    }
+
+    private func folderRow(_ folder: URL) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: "folder")
+                .font(.system(size: 10))
+                .foregroundStyle(Theme.amber)
+            Text(folder.lastPathComponent)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.textDim)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 4)
+            Button {
+                app.removeFolder(folder)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.textFaint)
+            .help("登録を解除")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 3)
+        .help(folder.path)
+    }
+
+    private func pickFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "追加"
+        panel.message = "HTML を閲覧するフォルダを選択"
+        if panel.runModal() == .OK, let url = panel.url {
+            app.addFolder(url)
+        }
+    }
+}
