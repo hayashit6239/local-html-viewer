@@ -14,6 +14,24 @@ Claude が生成する self-contained HTML を閲覧する macOS ネイティブ
 - **TDD(t_wada 流)**: 着手前にテストリストを書き、Red → Green → Refactor の小さなサイクル。判断ロジックは `HTMLViewerCore`(UI 非依存)に置いて `swift test` で駆動し、SwiftUI / WKWebView / odoc 境界は Humble Object として薄く保つ。コミットは Green ごとに小さく。詳細: `docs/04-verification.md`
 - ドキュメント(`docs/01`〜`05`)は実装と並走して更新する。実装と乖離したらドキュメントを直す(実装が正)
 
+## 進捗管理
+
+各ステップ(マイルストーン M0〜M9、および CI / chore 等の付随ステップ)は **issue による仕様固め**フェーズと **PR による実装**フェーズを持つ。進捗のスナップショットは Claude のプロジェクトメモリに `plan-progress.json`(JSON)として保持し、issue / PR の状況が変わるたびに更新する。
+
+各フェーズのステータスは、`plan-progress.json` 上では JSON の `null`(未着手) または以下の文字列(enum) **のみ**を取る:
+
+- **issue(仕様固め)** — 7 段階:
+  `null` → `created issue` → `starting review` → `completed review` → `starting brush-up` → `completed brush-up` → `closed issue`(終端)
+- **PR(実装)** — 7 段階:
+  `null` → `created pr` → `starting review` → `completed review` → `starting brush-up` → `completed brush-up` → `merged pr`(終端)
+
+運用ルール:
+
+- `null` = そのフェーズ未着手(対応する issue / PR が未作成)
+- GitHub 上で **closed** の issue は review / brush-up の有無に関わらず `closed issue`(終端)、**merged** の PR は `merged pr`(終端)
+- **issue を仕様の正**とし、PR 着手前に最新の issue を再読する(レビュー反映で仕様が更新されている場合があるため)
+- レビューは AI エージェントに**コメントとして残させ、修正は当てさせない**。指摘は作者が検証してから採否を決める(誇張は正確に評価し直す)。詳細: `.github/copilot-instructions.md`
+
 ## セキュリティ(公開リポジトリ — 違反は即インシデント)
 
 要約(詳細と検知時手順: `.claude/rules/security.md`):
