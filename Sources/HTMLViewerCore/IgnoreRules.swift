@@ -18,8 +18,10 @@ public enum IgnoreRules {
     }
 
     /// 除外ディレクトリ、または隠しディレクトリ(`.` 始まり)ならスキップ。
+    /// 比較は大文字小文字を無視する(HTML 拡張子判定と対称。`NODE_MODULES` や
+    /// case-sensitive フォーマットのボリュームでも除外漏れしないようにする)。
     public static func shouldSkipDirectory(_ name: String) -> Bool {
         if name.hasPrefix(".") { return true }
-        return ignoredDirectories.contains(name)
+        return ignoredDirectories.contains(name.lowercased())
     }
 }

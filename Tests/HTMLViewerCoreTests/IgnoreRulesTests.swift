@@ -6,6 +6,7 @@ import Testing
 // [x] .html / .htm を HTML と判定する(大文字小文字を無視)
 // [x] .md / 拡張子なし / .htmlx は HTML と判定しない
 // [x] ignore ディレクトリ(node_modules 等)はスキップ対象
+// [x] ignore ディレクトリ判定は大文字小文字を無視する(NODE_MODULES 等)
 // [x] 隠しディレクトリ(. 始まり)はスキップ対象
 // [x] 通常ディレクトリはスキップしない
 
@@ -33,6 +34,15 @@ struct IgnoreRulesTests {
         #expect(IgnoreRules.shouldSkipDirectory(".git"))
         #expect(IgnoreRules.shouldSkipDirectory("dist"))
         #expect(IgnoreRules.shouldSkipDirectory("build"))
+    }
+
+    @Test("ignore ディレクトリ判定は大文字小文字を無視する")
+    func skipsIgnoredDirectoriesCaseInsensitively() {
+        // case-sensitive ボリュームや大文字表記でも除外漏れしない(HTML 拡張子判定との対称性)
+        #expect(IgnoreRules.shouldSkipDirectory("NODE_MODULES"))
+        #expect(IgnoreRules.shouldSkipDirectory("Node_Modules"))
+        #expect(IgnoreRules.shouldSkipDirectory("DIST"))
+        #expect(IgnoreRules.shouldSkipDirectory("Build"))
     }
 
     @Test("隠しディレクトリはスキップ対象")
