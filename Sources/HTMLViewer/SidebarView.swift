@@ -81,20 +81,36 @@ struct SidebarView: View {
     }
 
     private func folderRow(_ folder: URL) -> some View {
-        let reachable = app.isReachable(folder)
+        let status = app.status(of: folder)
+        let dimmed = status == .unreachable
         return HStack(spacing: 7) {
-            Image(systemName: reachable ? "folder" : "folder.badge.questionmark")
+            Image(systemName: icon(for: status))
                 .font(.system(size: 10))
-                .foregroundStyle(reachable ? Theme.amber : Theme.textFaint)
+                .foregroundStyle(status == .unreachable ? Theme.textFaint : Theme.amber)
             Text(folder.lastPathComponent)
                 .font(.system(size: 12))
-                .foregroundStyle(reachable ? Theme.textDim : Theme.textFaint)
+                .foregroundStyle(dimmed ? Theme.textFaint : Theme.textDim)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            if !reachable {
+            if status == .unreachable {
                 Text("見つかりません")
                     .font(.system(size: 9.5))
                     .foregroundStyle(Theme.textFaint)
+            } else if status == .tccLikelyBlocked {
+                // 「在るのに 0 件 かつ TCC 保護領域」= 再署名で許可が失効した疑い。
+                // 人間が tccutil を思い出す運用に委ねず、再許可導線をその場に出す。
+                Button(action: openFilesAndFoldersSettings) {
+                    Text("アクセス許可")
+                        .font(.system(size: 9.5))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.amber)
+                .help(
+                    "このフォルダは 0 件です。ad-hoc 再署名でフォルダアクセス許可が失効した可能性があります。"
+                        + "クリックで「システム設定 > プライバシーとセキュリティ > ファイルとフォルダ」を開きます。"
+                        + "改善しない場合はターミナルで "
+                        + "`tccutil reset SystemPolicyDocumentsFolder com.hayashi.htmlviewer` を実行し、アプリを再起動してください。"
+                )
             }
             Spacer(minLength: 4)
             Button {
@@ -110,6 +126,22 @@ struct SidebarView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 3)
         .help(folder.path)
+    }
+
+    private func icon(for status: RootStatus) -> String {
+        switch status {
+        case .unreachable: return "folder.badge.questionmark"
+        case .tccLikelyBlocked: return "exclamationmark.triangle.fill"
+        case .ok, .empty: return "folder"
+        }
+    }
+
+    /// システム設定の「プライバシーとセキュリティ > ファイルとフォルダ」を開く。
+    /// ad-hoc アプリは TCC を自動付与できないため、できるのは再許可の導線提示まで。
+    private func openFilesAndFoldersSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func pickFolder() {

@@ -57,6 +57,33 @@ final class AppState {
         return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
     }
 
+    /// 登録ルートの走査状態を診断する。判定ロジックは `RootDiagnostics`(Core)に委譲し、
+    /// ここは FS 問い合わせ(到達可能性・件数・保護領域)の結線に徹する。
+    /// 「到達可能 かつ そのフォルダ配下 0 件 かつ TCC 保護領域」を `tccLikelyBlocked` として
+    /// 検知し、再署名による TCC サイレント失効をサイドバーで再許可案内できるようにする。
+    func status(of url: URL) -> RootStatus {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return RootDiagnostics.classify(
+            isReachable: isReachable(url),
+            fileCount: fileCount(under: url),
+            isUnderProtectedLocation: RootDiagnostics.isUnderProtectedLocation(path: url.path, home: home)
+        )
+    }
+
+    /// `url` 配下に物理的に存在する HTML 件数。入れ子登録(A と A/sub)でも親に件数を
+    /// 奪われないよう rootPath ではなく絶対パスの prefix 一致で数える。走査時の正規化で
+    /// `/var`→`/private/var` が入りうるため、登録パスと canonicalPath の両方で判定する。
+    private func fileCount(under url: URL) -> Int {
+        var prefixes = [url.path]
+        if let canonical = try? url.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath {
+            prefixes.append(canonical)
+        }
+        let normalized = prefixes.map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+        return allFiles.filter { file in
+            normalized.contains { file.path.hasPrefix($0) }
+        }.count
+    }
+
     /// 登録フォルダ群を再走査してリストを差し替える。重い走査は detached で UI を止めない。
     func rescan() {
         let roots = folders
