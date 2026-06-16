@@ -44,6 +44,19 @@ struct FolderScannerTests {
         #expect(!result.truncated)
     }
 
+    @Test("隠しファイル・隠しディレクトリ配下は走査対象外(成果物は dotfile でない前提)")
+    func skipsHiddenFilesAndDirectories() throws {
+        let root = try makeTree([
+            "visible.html",
+            ".hidden.html",         // 隠しファイル
+            ".config/inside.html",  // 隠しディレクトリ配下
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let names = Set(FolderScanner.scan(roots: [root]).files.map(\.name))
+        #expect(names == ["visible.html"])
+    }
+
     @Test("relativePath と rootPath を付与する")
     func assignsRelativePaths() throws {
         let root = try makeTree(["sub/deep/page.html"])

@@ -76,7 +76,7 @@ struct SidebarView: View {
 
     private var footerText: String {
         var s = "\(app.recentFiles.count) ファイル"
-        if app.scanTruncated { s += "(上限到達)" }
+        if app.scanTruncated { s += " (上限到達)" }
         return s
     }
 

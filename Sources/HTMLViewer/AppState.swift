@@ -84,11 +84,18 @@ final class AppState {
         }.count
     }
 
+    private var scanGeneration = 0
+
     /// 登録フォルダ群を再走査してリストを差し替える。重い走査は detached で UI を止めない。
     func rescan() {
         let roots = folders
+        scanGeneration &+= 1
+        let generation = scanGeneration
         Task {
             let result = await Task.detached { FolderScanner.scan(roots: roots) }.value
+            // 連打で複数の走査が走った場合、最後に開始した rescan の結果だけを適用する
+            // (先発の走査が後から完了して古い状態へ巻き戻すのを防ぐ)。AppState は MainActor 隔離。
+            guard generation == scanGeneration else { return }
             allFiles = result.files
             scanTruncated = result.truncated
 

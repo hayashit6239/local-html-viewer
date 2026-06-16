@@ -22,6 +22,9 @@ public enum FolderScanner {
 
         for root in roots {
             let keys: [URLResourceKey] = [.contentModificationDateKey, .isDirectoryKey, .isSymbolicLinkKey]
+            // .skipsHiddenFiles は隠しディレクトリだけでなく隠しファイル(`.report.html` 等)も
+            // 除外する。本アプリの対象は Claude 生成の成果物であり dotfile は成果物ではないため、
+            // この「隠しファイル・ディレクトリ双方を除外」は意図的な仕様(契約は FolderScannerTests で固定)。
             guard let enumerator = fm.enumerator(
                 at: root,
                 includingPropertiesForKeys: keys,
