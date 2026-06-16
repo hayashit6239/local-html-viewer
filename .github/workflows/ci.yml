@@ -13,8 +13,10 @@ permissions:
   contents: read
 
 jobs:
-  build-test:
-    name: build-test (macOS)
+  # job 名 = required status check の context。issue #10 決定により `gate` に固定する
+  # (job 名変更や typo による照合外れ・永久 pending を防ぐため context を 1 つに保つ)
+  gate:
+    name: gate
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
