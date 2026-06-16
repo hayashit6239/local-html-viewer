@@ -18,7 +18,7 @@ Claude が生成する self-contained HTML を閲覧する macOS ネイティブ
 
 各ステップ(マイルストーン M0〜M9、および CI / chore 等の付随ステップ)は **issue による仕様固め**フェーズと **PR による実装**フェーズを持つ。進捗のスナップショットは Claude のプロジェクトメモリに `plan-progress.json`(JSON)として保持し、issue / PR の状況が変わるたびに更新する。
 
-各フェーズのステータスは以下の enum **のみ**を取る:
+各フェーズのステータスは、`plan-progress.json` 上では JSON の `null`(未着手) または以下の文字列(enum) **のみ**を取る:
 
 - **issue(仕様固め)** — 7 段階:
   `null` → `created issue` → `starting review` → `completed review` → `starting brush-up` → `completed brush-up` → `closed issue`(終端)
