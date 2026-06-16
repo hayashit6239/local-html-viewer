@@ -36,8 +36,13 @@ install:
 # セキュリティ検査(.claude/rules/security.md の機械的検証)
 # - 実パス([/]Users[/] — パターン自体が自己マッチしないよう文字クラスで表記)の混入検知
 # - .gitignore が危険物を実際に無視しているかの検証
+#
+# 走査対象は git の追跡対象 + 未追跡(ただし .gitignore 除外後)= 「コミットされうるファイル」のみ。
+# git ls-files --exclude-standard により、.claude/settings.local.json 等の gitignore 済みローカル設定
+# (実パスを含むが決してコミットされない)を誤検知しない。-I はバイナリをスキップ。
 check:
-	@matches=$$(grep -rEn '[/]Users[/]' . --exclude-dir=.git --exclude-dir=.build --exclude-dir=dist || true); \
+	@matches=$$(git ls-files --cached --others --exclude-standard -z \
+		| xargs -0 grep -nEI '[/]Users[/]' 2>/dev/null || true); \
 	if [ -n "$$matches" ]; then \
 		echo "NG: 実パスが混入しています:"; echo "$$matches"; exit 1; \
 	fi
