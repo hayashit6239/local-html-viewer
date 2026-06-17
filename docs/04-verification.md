@@ -1,6 +1,6 @@
 # 04. 検証計画書
 
-最終更新: 2026-06-12(M0 結果を記録)
+最終更新: 2026-06-16(M3 再レビュー反映: 手動検証チェックリスト §5 を追加)
 
 ## 1. 開発・検証方針(TDD)
 
@@ -12,7 +12,7 @@
 | 区分 | 対象 | 手段 |
 |---|---|---|
 | `swift test` でカバー | 走査・ignore 規則・ソート・検索・ツリー構築・選択移動・永続化コーデック・外部オープンポリシー | Swift Testing(単体) |
-| 〃(統合) | FileWatcher(FSEvents) | temp dir に書き込み → イベント受信を timeout 付きで検証。flaky 時は 1 回リトライ |
+| 〃(統合) | FileWatcher(FSEvents) | temp dir に書き込み → イベント受信を timeout 付きで検証。flaky 時は 1 回リトライ。**M6 着手時は本実装前に最初のスモークで CLT+ad-hoc 環境での FSEvents 実動を実証する**(未実証の継承を断つ。05 D4) |
 | 自動テスト不能 | SwiftUI 描画 / オープンイベント配送 / TCC / WKWebView 表示・スクロール復元 | マイルストーンの手動検証ゴール(下表)で担保 |
 | セキュリティ | 実パス混入 / .gitignore 機能 | `make check`(全 M 共通ゲート) |
 | hook | open-html.sh の入力処理・スロットル | `scripts/test-hooks.sh`(JSON fixture を流す) |
@@ -25,7 +25,7 @@
 | M1 | SPM 3 ターゲット + 空ウィンドウ + ダミーテスト | `swift build && swift run` でウィンドウ表示 / `make test` が 0(Swift Testing の CLT 動作確認) | ✅ 2026-06-12(素の `swift test` は CLT で不動作 → `make test` にフラグ固定化。詳細: 03 §5 M1) |
 | M2 | Info.plist + build.sh + Makefile 拡張 | `make install && open -a HTMLViewer` で起動 / `codesign -dv` が通る | ✅ 2026-06-12(`open -b` の単一インスタンス配送も確認。詳細: 03 §5 M2) |
 | M2.5 | オープンイベント受信スモーク(最大リスク前倒し) | 未起動で `open -b com.hayashi.htmlviewer /tmp/t.html` → 受信パスが表示される / 起動中再実行でプロセス数 1(`pgrep -x HTMLViewer \| wc -l`) | — |
-| M3 | 走査 + RECENT リスト + フォルダ登録永続化 | 登録 → mtime 降順表示 / 再起動で保持 / node_modules 除外 / `swift test` 0 | — |
+| M3 | 走査 + RECENT リスト + フォルダ登録永続化 | 登録 → mtime 降順表示 / 再起動で保持 / node_modules 除外 / `swift test` 0 | ✅ 2026-06-15(Core テスト green。走査→ソートの受け入れ条件をテスト化)。2026-06-16 再レビュー反映: ignore case-insensitive 化・TCC 検知/案内・A-1 撤退基準(05 D9)を追加し Core 27 テスト green。GUI 手動検証は §5 チェックリストで担保 |
 | M4 | WKWebView プレビュー + 起動時最新表示 + reveal + JS パネル | クリックでプレビュー / 起動直後に最新表示 / `alert()` fixture でダイアログ表示 | — |
 | M5 | 外部オープン完成(EXTERNAL ピン留め・一時監視) | M2.5 + 表示まで一気通貫 / Dock アイコン D&D でも開く | — |
 | M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | — |
@@ -37,3 +37,21 @@
 
 - バンドル挙動(オープンイベント / TCC / UserDefaults)の検証は必ず `make install` 後のバンドル版で行う
 - 検証用 HTML fixture は全て合成データ(`.claude/rules/security.md` 規約 3)
+
+## 5. 手動検証チェックリスト
+
+`swift test` が閉じられない GUI / TCC / バンドル境界は、ここで「実施した」記録を残して*完了の真正性*を担保する。実施は **必ず `make install` 後のバンドル版**で行い、合成データのみ使う。各 M 完了時に該当ブロックを埋める(チェック + 実施日)。
+
+### M3: 走査 + RECENT リスト + フォルダ登録永続化(テンプレ)
+
+| # | 項目 | 手順 | 期待 | 結果 |
+|---|---|---|---|---|
+| 1 | フォルダ登録 | サイドバー「＋」→ 合成 HTML を含むフォルダを選択 | RECENT に `.html` が mtime 降順で並ぶ | ⬜ |
+| 2 | 複数フォルダ統合 | 2 つ目のフォルダを登録 | 両者が 1 つの RECENT に統合され重複なし | ⬜ |
+| 3 | 再起動保持 | アプリ quit → 再起動 | 登録フォルダと RECENT が復元される | ⬜ |
+| 4 | ignore 除外 | `node_modules` 配下に HTML を置く | 一覧に出ない | ⬜ |
+| 5 | stale 表示 | 登録フォルダをリネーム / 外付けを unmount | 「見つかりません」表示・登録は維持 | ⬜ |
+| 6 | TCC 検知/案内 | `tccutil reset SystemPolicyDocumentsFolder com.hayashi.htmlviewer` 後に `~/Documents` 配下を登録 | 「アクセス許可」導線が出る → クリックで設定が開く | ⬜ |
+| 7 | 空状態 | `.html` 0 件のフォルダ(保護領域外)を登録 | クラッシュせず空のまま(案内は出ない) | ⬜ |
+
+> 記録例: 各行の「結果」を `✅ 2026-06-NN` で置換し、特記事項があれば脚注を添える。
