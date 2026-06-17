@@ -22,11 +22,15 @@ cd "$(dirname "$0")/.."
 
 echo "==> swift build -c release"
 swift build -c release
+# 生成物パスは --show-bin-path で取得する。.build/release は実体
+# (.build/<triple>/release)へのシンボリックリンクで、SwiftPM の内部構造変更や
+# マルチアーキ時にハードコード(.build/release 直書き)だと壊れうるため。
+BIN_DIR="$(swift build -c release --show-bin-path)"
 
 echo "==> assemble $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp ".build/release/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
+cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp Support/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 plutil -lint "$APP/Contents/Info.plist"
