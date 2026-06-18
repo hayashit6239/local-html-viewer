@@ -68,5 +68,6 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .foregroundStyle(Theme.textDim)
         .help(help)
+        .accessibilityLabel(help)  // アイコンのみ Button は help だけだと VoiceOver にラベルが伝わらない
     }
 }

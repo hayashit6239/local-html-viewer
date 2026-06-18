@@ -37,9 +37,11 @@ struct WebViewContainer: NSViewRepresentable {
             guard file.path != lastLoadedPath || reloadToken != lastReloadToken else { return }
             lastLoadedPath = file.path
             lastReloadToken = reloadToken
-            let fileURL = URL(fileURLWithPath: file.path)
-            // allowingReadAccessTo は所属ルート(同フォルダの相対 css/img を読むため)
-            let root = URL(fileURLWithPath: file.rootPath)
+            let fileURL = URL(fileURLWithPath: file.path, isDirectory: false)
+            // allowingReadAccessTo は所属ルート(同フォルダの相対 css/img を読むため)。
+            // isDirectory: true を明示しないと hasDirectoryPath が FS stat 依存になり、
+            // 読み取り許可がファイル単体スコープに縮退して相対リソースが読めない恐れがある。
+            let root = URL(fileURLWithPath: file.rootPath, isDirectory: true)
             webView.loadFileURL(fileURL, allowingReadAccessTo: root)
         }
 
