@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import HTMLViewerCore
 import Observation
@@ -15,8 +16,10 @@ final class AppState {
     private(set) var allFiles: [HTMLFile] = []
     /// MAX_FILES 到達で打ち切ったか。
     private(set) var scanTruncated = false
-    /// 選択中ファイル(プレビューは M4 で実装)。
+    /// 選択中ファイル。WebView でプレビューする。
     var selectedFile: HTMLFile?
+    /// プレビューの明示リロード要求(loadFileURL 再実行を発火させる単調増加トークン)。
+    private(set) var reloadToken = 0
     /// odoc で受信した `.html` パス(M2.5 のスモーク観測点。バナーが表示する)。
     /// `selectedFile`(HTMLFile 型)は登録フォルダ外の受信で型が決まらないため M2.5 では使わない(合流は M5)。
     private(set) var receivedPaths: [String] = []
@@ -51,6 +54,21 @@ final class AppState {
         folders.removeAll { $0.path == url.path }
         saveFolders()
         rescan()
+    }
+
+    /// 表示中ファイルを再読込する(loadFileURL 再実行。reload() は使わない — docs/03 §2-7)。
+    func reloadPreview() {
+        reloadToken &+= 1
+    }
+
+    /// Finder で選択表示する。
+    func revealInFinder(_ file: HTMLFile) {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.path)])
+    }
+
+    /// 既定ブラウザで開く(LSHandlerRank=Alternate のため .html の既定ハンドラはブラウザ)。
+    func openInBrowser(_ file: HTMLFile) {
+        NSWorkspace.shared.open(URL(fileURLWithPath: file.path))
     }
 
     /// odoc 受信 URL を `.html` かつ実在のものに絞ってバナー観測用に保持する(M2.5)。

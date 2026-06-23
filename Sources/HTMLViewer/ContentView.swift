@@ -64,24 +64,18 @@ struct ContentView: View {
                         .lineLimit(1)
                         .truncationMode(.head)
                     Spacer()
+                    topbarButton("arrow.clockwise", help: "再読込") { app.reloadPreview() }
+                    topbarButton("magnifyingglass", help: "Finder で表示") { app.revealInFinder(file) }
+                    topbarButton("safari", help: "ブラウザで開く") { app.openInBrowser(file) }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.vertical, 10)
                 Divider().overlay(Color.white.opacity(0.08))
 
-                // プレビュー本体は M4(WKWebView)。M3 ではプレースホルダ。
-                VStack(spacing: 8) {
-                    Image(systemName: "doc.richtext")
-                        .font(.system(size: 32))
-                        .foregroundStyle(Theme.textFaint)
-                    Text(file.relativePath)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(Theme.textDim)
-                    Text("プレビューは M4 で実装")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.textFaint)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // プレビュー本体(WKWebView)。背景白でコンテンツ忠実。
+                WebViewContainer(file: file, reloadToken: app.reloadToken)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.white)
             }
         } else {
             VStack(spacing: 8) {
@@ -94,5 +88,16 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func topbarButton(_ systemName: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.textDim)
+        .help(help)
+        .accessibilityLabel(help)  // アイコンのみ Button は help だけだと VoiceOver にラベルが伝わらない
     }
 }
