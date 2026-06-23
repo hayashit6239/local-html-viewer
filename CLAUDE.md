@@ -22,8 +22,8 @@ Claude が生成する self-contained HTML を閲覧する macOS ネイティブ
 
 - **issue(仕様固め)** — 7 段階:
   `null` → `created issue` → `starting review` → `completed review` → `starting brush-up` → `completed brush-up` → `closed issue`(終端)
-- **PR(実装)** — 7 段階:
-  `null` → `created pr` → `starting review` → `completed review` → `starting brush-up` → `completed brush-up` → `merged pr`(終端)
+- **PR(実装)** — 9 段階(`completed review` 後に `ready for merge` / `starting brush-up` へ分岐、brush-up 後は `waiting for review` に戻して再レビュー):
+  `null` → [`implementation-ready`(任意の前段)] → `created pr` → `waiting for review` → `starting review` → `completed review` → (`ready for merge` → `merged pr`(終端) | `starting brush-up` → `waiting for review` …)
 
 運用ルール:
 
