@@ -11,7 +11,7 @@ struct WebViewContainer: NSViewRepresentable {
     let reloadToken: Int
 
     func makeNSView(context: Context) -> WKWebView {
-        let webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        let webView = WKWebView(frame: .zero)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.isInspectable = true  // 右クリック → 要素の詳細(デバッグ用)
