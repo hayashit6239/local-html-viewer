@@ -20,6 +20,9 @@ final class AppState {
     var selectedFile: HTMLFile?
     /// プレビューの明示リロード要求(loadFileURL 再実行を発火させる単調増加トークン)。
     private(set) var reloadToken = 0
+    /// odoc で受信した `.html` パス(M2.5 のスモーク観測点。バナーが表示する)。
+    /// `selectedFile`(HTMLFile 型)は登録フォルダ外の受信で型が決まらないため M2.5 では使わない(合流は M5)。
+    private(set) var receivedPaths: [String] = []
 
     /// RECENT タブ用: mtime 降順。
     var recentFiles: [HTMLFile] {
@@ -66,6 +69,15 @@ final class AppState {
     /// 既定ブラウザで開く(LSHandlerRank=Alternate のため .html の既定ハンドラはブラウザ)。
     func openInBrowser(_ file: HTMLFile) {
         NSWorkspace.shared.open(URL(fileURLWithPath: file.path))
+    }
+
+    /// odoc 受信 URL を `.html` かつ実在のものに絞ってバナー観測用に保持する(M2.5)。
+    /// 内/外の分岐や selectedFile 合流は M5。連続受信は最新イベントの結果で置き換える(二重表示しない)。
+    func handleOpenedURLs(_ urls: [URL]) {
+        let fm = FileManager.default
+        let paths = OpenEventPolicy.acceptableHTMLPaths(from: urls) { fm.fileExists(atPath: $0) }
+        guard !paths.isEmpty else { return }
+        receivedPaths = paths
     }
 
     /// 登録フォルダが現在到達可能か(削除/移動/外付け unmount の検出)。
