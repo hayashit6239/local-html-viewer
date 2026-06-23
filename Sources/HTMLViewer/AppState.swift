@@ -50,12 +50,14 @@ final class AppState {
         folders.append(url)
         saveFolders()
         rescan()
+        rebuildWatcher()  // 監視対象に新ルートを反映
     }
 
     func removeFolder(_ url: URL) {
         folders.removeAll { $0.path == url.path }
         saveFolders()
         rescan()
+        rebuildWatcher()
     }
 
     /// 表示中ファイルを再読込する(loadFileURL 再実行。reload() は使わない — docs/03 §2-7)。
@@ -121,9 +123,71 @@ final class AppState {
         }
     }
 
-    /// パスを `.canonicalPathKey` で正規化(`/var`→`/private/var`)。取得不能時は元のパス。
+    /// パスを canonical 正規化(M5/M6 共通の `PathNormalizer` に委譲)。
     private func canonicalPath(of path: String) -> String {
-        (try? URL(fileURLWithPath: path).resourceValues(forKeys: [.canonicalPathKey]).canonicalPath) ?? path
+        PathNormalizer.canonical(path)
+    }
+
+    // MARK: - ファイル監視(M6)
+
+    private var watcher: FileWatcher?
+    private var watchTask: Task<Void, Never>?
+    private var debounceTask: Task<Void, Never>?
+    private var pendingWatchPaths: [String] = []
+
+    /// 監視を開始(起動時に呼ぶ)。登録フォルダ群を FSEvents で監視する。
+    func startWatching() {
+        rebuildWatcher()
+    }
+
+    /// 登録フォルダの変更時に監視ストリームを作り直す(FSEvents はパス追加 API を持たない)。
+    /// 到達不能なルート(外付け unmount 等)は除外(fail-silent)。
+    private func rebuildWatcher() {
+        watchTask?.cancel()
+        watcher?.stop()
+        let reachable = folders.filter { isReachable($0) }
+        guard !reachable.isEmpty else { watcher = nil; return }
+        let w = FileWatcher(roots: reachable)
+        watcher = w
+        w.start()
+        watchTask = Task { [weak self] in
+            for await batch in w.events {
+                self?.scheduleWatchApply(batch)
+            }
+        }
+    }
+
+    /// 受信バッチを 300ms debounce(= Claude の連続保存の典型間隔)で集約し 1 回適用する。
+    /// 結線は「for await → debounce → WatchEventPolicy 判定 → rescan/reload」の薄い 4 段のみ
+    /// (debounce 意味論は Core `Debounce.coalesce` で、判定は `WatchEventPolicy` でテスト済み)。
+    private func scheduleWatchApply(_ batch: [String]) {
+        pendingWatchPaths.append(contentsOf: batch)
+        debounceTask?.cancel()
+        debounceTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled, let self else { return }
+            let paths = self.pendingWatchPaths
+            self.pendingWatchPaths = []
+            self.applyWatch(paths)
+        }
+    }
+
+    private func applyWatch(_ paths: [String]) {
+        let normalized = paths.map { PathNormalizer.canonical($0) }
+        let displayed = selectedFile.map { PathNormalizer.canonical($0.path) }
+        switch WatchEventPolicy.decide(paths: normalized, displayedPath: displayed) {
+        case .ignore:
+            break
+        case .reloadDisplayed:
+            // 表示中が消えていたら reload(失敗)でなく rescan で一覧更新 + 選択移動(M4 削除時挙動)
+            if let d = displayed, FileManager.default.fileExists(atPath: d) {
+                reloadPreview()
+            } else {
+                rescan()
+            }
+        case .rescan:
+            rescan()
+        }
     }
 
     /// 登録フォルダが現在到達可能か(削除/移動/外付け unmount の検出)。
