@@ -1,6 +1,12 @@
 import Foundation
 
 /// 走査で発見された 1 つの HTML ファイル。
+///
+/// `Identifiable` の `id == path` に合わせて `Hashable` / `Equatable` も **path のみ**で実装する。
+/// 自動合成の全フィールド比較だと、同 path / 異 `isExternal` の 2 つのインスタンス
+/// (例: EXTERNAL ピンと内部走査結果の同一ファイル)が異値扱いとなり、SwiftUI の
+/// `List(selection:)` 等で selection 同期がずれる。`id` ベースの diff と `Hashable`
+/// 照合を整合させるため明示的に path のみで比較する。
 public struct HTMLFile: Identifiable, Hashable, Sendable {
     public var id: String { path }
 
@@ -32,5 +38,13 @@ public struct HTMLFile: Identifiable, Hashable, Sendable {
         self.rootPath = rootPath
         self.relativePath = relativePath
         self.isExternal = isExternal
+    }
+
+    public static func == (lhs: HTMLFile, rhs: HTMLFile) -> Bool {
+        lhs.path == rhs.path
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(path)
     }
 }
