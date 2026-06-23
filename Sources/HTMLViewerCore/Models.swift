@@ -14,12 +14,23 @@ public struct HTMLFile: Identifiable, Hashable, Sendable {
     public let rootPath: String
     /// ルートからの相対パス
     public let relativePath: String
+    /// 登録フォルダ外を odoc で受信したファイル(M5: EXTERNAL ピン)。
+    /// true のとき WebView の read-access はファイル単体スコープ、UI は EXTERNAL バッジ表示。
+    public let isExternal: Bool
 
-    public init(path: String, name: String, mtime: Date, rootPath: String, relativePath: String) {
+    public init(
+        path: String,
+        name: String,
+        mtime: Date,
+        rootPath: String,
+        relativePath: String,
+        isExternal: Bool = false
+    ) {
         self.path = path
         self.name = name
         self.mtime = mtime
         self.rootPath = rootPath
         self.relativePath = relativePath
+        self.isExternal = isExternal
     }
 }

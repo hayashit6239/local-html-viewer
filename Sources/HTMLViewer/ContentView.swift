@@ -6,8 +6,8 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !app.receivedPaths.isEmpty {
-                receivedBanner
+            if let unreadable = app.unreadableExternalPath {
+                unreadableBanner(unreadable)
             }
             HStack(spacing: 0) {
                 SidebarView()
@@ -21,23 +21,19 @@ struct ContentView: View {
         .background(Theme.background)
     }
 
-    /// M2.5: odoc で受信した `.html` パスを表示するスモーク観測点(プレビュー合流は M5)。
-    private var receivedBanner: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "tray.and.arrow.down")
+    /// M5: 受信したが読めない(canonicalPath nil / TCC 等)外部ファイルの通知(ピンはしない)。
+    private func unreadableBanner(_ path: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(Theme.amber)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("受信(open イベント)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Theme.amber)
-                ForEach(app.receivedPaths, id: \.self) { path in
-                    Text(path)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Theme.text)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-            }
+            Text("読めない外部ファイル:")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.amber)
+            Text(path)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Theme.text)
+                .lineLimit(1)
+                .truncationMode(.head)
             Spacer()
         }
         .padding(.horizontal, 16)
@@ -55,6 +51,13 @@ struct ContentView: View {
                     Text(file.name)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Theme.text)
+                    if file.isExternal {
+                        Text("EXTERNAL")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Theme.amber)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.amber.opacity(0.5)))
+                    }
                     Text("in")
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.textFaint)

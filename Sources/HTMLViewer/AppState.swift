@@ -20,13 +20,15 @@ final class AppState {
     var selectedFile: HTMLFile?
     /// プレビューの明示リロード要求(loadFileURL 再実行を発火させる単調増加トークン)。
     private(set) var reloadToken = 0
-    /// odoc で受信した `.html` パス(M2.5 のスモーク観測点。バナーが表示する)。
-    /// `selectedFile`(HTMLFile 型)は登録フォルダ外の受信で型が決まらないため M2.5 では使わない(合流は M5)。
-    private(set) var receivedPaths: [String] = []
+    /// 登録フォルダ外を受信した EXTERNAL ピン(単一・セッション限り・非永続)。RECENT 先頭に合成する。
+    private(set) var pinnedExternal: HTMLFile?
+    /// 読めない(canonicalPath nil 等)受信パス。サイドバーの「読めない」表示に使う。
+    private(set) var unreadableExternalPath: String?
 
-    /// RECENT タブ用: mtime 降順。
+    /// RECENT タブ用: mtime 降順 + 先頭に EXTERNAL ピンを合成(既出なら omit = 二重解消)。
     var recentFiles: [HTMLFile] {
-        RecentSorter.sortedByModificationDateDescending(allFiles)
+        let sorted = RecentSorter.sortedByModificationDateDescending(allFiles)
+        return ExternalOpenPolicy.compose(recent: sorted, pinned: pinnedExternal)
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -71,13 +73,57 @@ final class AppState {
         NSWorkspace.shared.open(URL(fileURLWithPath: file.path))
     }
 
-    /// odoc 受信 URL を `.html` かつ実在のものに絞ってバナー観測用に保持する(M2.5)。
-    /// 内/外の分岐や selectedFile 合流は M5。連続受信は最新イベントの結果で置き換える(二重表示しない)。
+    /// odoc 受信 URL を内外判定し、外部=EXTERNAL ピン / 内部=通常選択する(M5)。
+    /// 複数 URL は「外部の最後 1 件をピン + 内部の最後 1 件を選択」(併存)。
+    /// 同一 external の再受信は reload(`reloadToken` 強制インクリメント)でピン churn なし。
+    /// パス比較はすべて `.canonicalPathKey` 正規化後で揃える(`ExternalOpenPolicy` の不変条件)。
     func handleOpenedURLs(_ urls: [URL]) {
         let fm = FileManager.default
-        let paths = OpenEventPolicy.acceptableHTMLPaths(from: urls) { fm.fileExists(atPath: $0) }
-        guard !paths.isEmpty else { return }
-        receivedPaths = paths
+        let rootsCanonical = folders.map { canonicalPath(of: $0.path) }
+
+        var lastExternal: (path: String, mtime: Date)?
+        var lastInternal: HTMLFile?
+        var unreadable: String?
+
+        for url in urls where IgnoreRules.isHTMLFile(url.lastPathComponent) {
+            guard let cpath = try? url.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath else {
+                unreadable = url.path  // canonicalPath nil = 読めない(ピンしない)
+                continue
+            }
+            guard fm.fileExists(atPath: cpath) else {
+                if cpath == pinnedExternal?.path { pinnedExternal = nil }  // 削除 → ピン落とし
+                continue
+            }
+            if ExternalOpenPolicy.isInside(cpath, registeredRoots: rootsCanonical) {
+                if let match = allFiles.first(where: { $0.path == cpath }) { lastInternal = match }
+            } else {
+                let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate) ?? Date()
+                lastExternal = (cpath, mtime)
+            }
+        }
+
+        if let ext = lastExternal {
+            if ext.path != pinnedExternal?.path {
+                pinnedExternal = ExternalOpenPolicy.makeExternalFile(path: ext.path, mtime: ext.mtime)
+            }
+            reloadToken &+= 1  // 新規ピンも同一再受信も reload(再生成内容を反映)
+            unreadableExternalPath = nil
+        }
+        if let inter = lastInternal {
+            selectedFile = inter
+            unreadableExternalPath = nil
+        } else if lastExternal != nil {
+            selectedFile = pinnedExternal  // 内部が無ければ外部ピンを選択
+        }
+        if lastExternal == nil, lastInternal == nil, let u = unreadable {
+            unreadableExternalPath = u  // 読めない受信のみ
+        }
+    }
+
+    /// パスを `.canonicalPathKey` で正規化(`/var`→`/private/var`)。取得不能時は元のパス。
+    private func canonicalPath(of path: String) -> String {
+        (try? URL(fileURLWithPath: path).resourceValues(forKeys: [.canonicalPathKey]).canonicalPath) ?? path
     }
 
     /// 登録フォルダが現在到達可能か(削除/移動/外付け unmount の検出)。
@@ -129,8 +175,10 @@ final class AppState {
             allFiles = result.files
             scanTruncated = result.truncated
 
-            // 選択中ファイルが消えていたら解除し、未選択なら最新を選ぶ
-            if let sel = selectedFile, !result.files.contains(where: { $0.path == sel.path }) {
+            // 選択中ファイルが消えていたら解除し、未選択なら最新を選ぶ。
+            // EXTERNAL ピンは走査結果に出ないため対象外(再走査で選択を奪わない)。
+            if let sel = selectedFile, !sel.isExternal,
+                !result.files.contains(where: { $0.path == sel.path }) {
                 selectedFile = nil
             }
             if selectedFile == nil {
