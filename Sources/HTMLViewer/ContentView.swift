@@ -5,15 +5,45 @@ struct ContentView: View {
     @Environment(AppState.self) private var app
 
     var body: some View {
-        HStack(spacing: 0) {
-            SidebarView()
-                .frame(width: 300)
-            Divider().overlay(Color.white.opacity(0.08))
-            previewPane
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 0) {
+            if !app.receivedPaths.isEmpty {
+                receivedBanner
+            }
+            HStack(spacing: 0) {
+                SidebarView()
+                    .frame(width: 300)
+                Divider().overlay(Color.white.opacity(0.08))
+                previewPane
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .frame(minWidth: 900, minHeight: 600)
         .background(Theme.background)
+    }
+
+    /// M2.5: odoc で受信した `.html` パスを表示するスモーク観測点(プレビュー合流は M5)。
+    private var receivedBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "tray.and.arrow.down")
+                .foregroundStyle(Theme.amber)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("受信(open イベント)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.amber)
+                ForEach(app.receivedPaths, id: \.self) { path in
+                    Text(path)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Theme.amber.opacity(0.08))
+        .overlay(alignment: .bottom) { Divider().overlay(Color.white.opacity(0.08)) }
     }
 
     @ViewBuilder

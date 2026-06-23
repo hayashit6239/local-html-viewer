@@ -24,7 +24,7 @@
 | M0 | リポジトリ統治 + docs 基盤 | `make check` が 0 / 初回コミットに統治・docs のみ | ✅ 2026-06-12 |
 | M1 | SPM 3 ターゲット + 空ウィンドウ + ダミーテスト | `swift build && swift run` でウィンドウ表示 / `make test` が 0(Swift Testing の CLT 動作確認) | ✅ 2026-06-12(素の `swift test` は CLT で不動作 → `make test` にフラグ固定化。詳細: 03 §5 M1) |
 | M2 | Info.plist + build.sh + Makefile 拡張 | `make install && open -a HTMLViewer` で起動 / `codesign -dv` が通る | ✅ 2026-06-12(`open -b` の単一インスタンス配送も確認。詳細: 03 §5 M2) |
-| M2.5 | オープンイベント受信スモーク(最大リスク前倒し) | 未起動で `open -b com.hayashi.htmlviewer /tmp/t.html` → 受信パスが表示される / 起動中再実行でプロセス数 1(`pgrep -x HTMLViewer \| wc -l`) | — |
+| M2.5 | オープンイベント受信スモーク(最大リスク前倒し) | 未起動で `open -b com.hayashi.htmlviewer <合成.html>` → 受信パスがバナー表示 / 起動中再実行でプロセス数 1(`pgrep -x HTMLViewer \| wc -l`) | ✅ 2026-06-18(`OpenEventPolicy` 5 テスト → 計 33 green。バンドル版で odoc 受信を実機確認: コールド起動受信〔odoc は didFinishLaunching 前に到達 → バッファ→drain〕・単一インスタンス・連続受信で二重なし・異常系クラッシュなし。`application(_:open:)` が発火し plan B 不要。§5 に記録) |
 | M3 | 走査 + RECENT リスト + フォルダ登録永続化 | 登録 → mtime 降順表示 / 再起動で保持 / node_modules 除外 / `swift test` 0 | ✅ 2026-06-15(Core テスト green。走査→ソートの受け入れ条件をテスト化)。2026-06-16 再レビュー反映: ignore case-insensitive 化・TCC 検知/案内・A-1 撤退基準(05 D9)を追加し Core 27 テスト green。GUI 手動検証は §5 チェックリストで担保 |
 | M4 | WKWebView プレビュー + 起動時最新表示 + reveal + JS パネル | クリックでプレビュー / 起動直後に最新表示 / `alert()` fixture でダイアログ表示 | — |
 | M5 | 外部オープン完成(EXTERNAL ピン留め・一時監視) | M2.5 + 表示まで一気通貫 / Dock アイコン D&D でも開く | — |
@@ -55,3 +55,17 @@
 | 7 | 空状態 | `.html` 0 件のフォルダ(保護領域外)を登録 | クラッシュせず空のまま(案内は出ない) | ⬜ |
 
 > 記録例: 各行の「結果」を `✅ 2026-06-NN` で置換し、特記事項があれば脚注を添える。
+
+### M2.5: オープンイベント受信スモーク
+
+実施: 2026-06-18(`make install` 後のバンドル版・合成 HTML)。
+
+| # | 項目 | 手順 | 期待 | 結果 |
+|---|---|---|---|---|
+| 1 | コールド起動受信 | アプリ未起動で `open -b com.hayashi.htmlviewer <合成.html>` | 起動し受信パスがバナー表示(odoc は `didFinishLaunching` 前に到達 → バッファ→drain) | ✅ 2026-06-18 |
+| 2 | 単一インスタンス | 起動中に再度 `open -b ... <合成.html>` | `pgrep -x HTMLViewer \| wc -l` が 1 | ✅ 2026-06-18 |
+| 3 | 連続受信で二重なし | 続けて別 `.html` を open | `receivedPaths` が最新で置換(重複しない) | ✅ 2026-06-18 |
+| 4 | 異常系 | 非 `.html` / 存在しないパスを open | クラッシュせず無視 | ✅ 2026-06-18 |
+| 5 | Dock D&D | Dock アイコンへ `.html` をドロップ | 同経路で受信・バナー表示 | ⬜(GUI 手動) |
+
+> 注: odoc 発火の確認は `NSLog` が `log show` で安定捕捉できず、一時センチネルファイル(検証後削除)で実施。`application(_:open:)` は SwiftUI ライフサイクルでも発火し plan B(`kAEOpenDocuments` / `.onOpenURL`)は不要だった。
