@@ -29,7 +29,7 @@
 | M4 | WKWebView プレビュー + 起動時最新表示 + reveal + JS パネル | クリックでプレビュー / 起動直後に最新表示 / `alert()` fixture でダイアログ表示 | ✅ 2026-06-17(`NavigationPolicy` 5 テスト → 計 33 green、build/起動スモーク OK。レンダリング・JS ダイアログ・reveal は §5 手動チェックリストで担保) |
 | M5 | 外部オープン完成(EXTERNAL ピン留め・一時監視) | M2.5 + 表示まで一気通貫 / Dock アイコン D&D でも開く | — |
 | M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | — |
-| M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / `swift test` 0 | — |
+| M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / `swift test` 0 | ✅ 2026-06-23(`TreeBuilder`/`SearchProvider`/`SelectionLogic` 計 61 green、build/起動スモーク OK。セグメント・検索・OutlineGroup・キー操作の目視は §5)|
 | M8 | hook + settings example | `scripts/test-hooks.sh` が 0 / 実セッションで Write → 自動表示 | — |
 | M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | — |
 
@@ -69,3 +69,20 @@
 | 5 | Dock D&D | Dock アイコンへ `.html` をドロップ | 同経路で受信・バナー表示 | ⬜(GUI 手動) |
 
 > 注: odoc 発火の確認は `NSLog` が `log show` で安定捕捉できず、一時センチネルファイル(検証後削除)で実施。`application(_:open:)` は SwiftUI ライフサイクルでも発火し plan B(`kAEOpenDocuments` / `.onOpenURL`)は不要だった。
+
+### M7: TREE タブ + 検索 + キーボード
+
+実施: 2026-06-23(`make install` 後のバンドル版・合成 HTML)。Core は `make test` で担保。
+
+| # | 項目 | 手順 | 期待 | 結果 |
+|---|---|---|---|---|
+| 1 | セグメント切替 | 「最近」「ツリー」を切替 | RECENT(mtime 降順)/ TREE(階層)が切り替わる・選択維持 | ⬜(GUI 目視) |
+| 2 | 検索 | 検索フィールドに入力 | 両タブが即時フィルタ・ヒット 0 件でも破綻しない | ⬜(GUI 目視) |
+| 3 | `/` フォーカス | リストフォーカス時に `/` | 検索フィールドへフォーカス | ⬜(GUI 目視) |
+| 4 | Esc クリア | 検索入力中に Esc | クエリクリア + リストへ復帰 | ⬜(GUI 目視) |
+| 5 | j/k 移動 | リストで j/k | 選択が上下移動し即プレビュー(端クランプ) | ⬜(GUI 目視) |
+| 6 | 検索中の透過 | 検索フォーカス中に j/k/r | テキスト入力として扱う(ビューア操作にならない) | ⬜(GUI 目視) |
+| 7 | r / ⌘⇧R | リストで `r` / `⌘⇧R` | 再読込 / Finder 表示(未選択なら no-op) | ⬜(GUI 目視) |
+| 8 | TREE 展開 | ツリータブで dir | OutlineGroup で階層展開・leaf 選択で即プレビュー | ⬜(GUI 目視) |
+
+> 注: Core(`TreeBuilder`/`SearchProvider`/`SelectionLogic`)は `make test` で閉じる。キーモニタ・@FocusState・OutlineGroup の体感は GUI 手動。>40 件の第一階層のみ展開は M9 ポリッシュ(M7 は OutlineGroup 全展開)。

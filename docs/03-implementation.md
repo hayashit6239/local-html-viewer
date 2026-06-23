@@ -112,4 +112,11 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - `NavigationPolicy` のスキーム分類を issue #11 決定の表どおりに実装: `http`/`https`/`mailto`/`tel`/`facetime`/`sms` を `openExternally`、`file`/`data`/`about`/`blob` を `allowInWebView` に明示。default は安全側で `allowInWebView`(未知スキームは WebView に委ねる)。`NavigationPolicyTests` を 5 本 → スキーム別 12 本に拡張(DoD 充足)
   - `WebViewContainer.createWebViewWith` を `decide` 経由に統一(`target="_blank"` で非 http のスキーム — `mailto:` 等 — も `NSWorkspace` に委譲)。`makeNSView` の空 `WKWebViewConfiguration()` 引数を削除(`WKWebView(frame:.zero)` で同義)
 
-(M5 以降、完了時に追記)
+### M7(2026-06-23)
+- Core(TDD): `TreeBuilder`(階層構築・`allLeaves`/`visibleLeaves`/`defaultExpanded`/`ancestors`、ID は絶対 path)/ `SearchProvider`(`FilenameSearchProvider`: NFC 正規化後 case-insensitive 部分一致、D8 再設計前提)/ `SelectionLogic`(`next` クランプ移動 + `reconcile` フィルタ後保持、照合は id)/ `TreeNode` モデル。テスト計 61
+- UI(Humble): `SidebarView` に検索フィールド(`@FocusState`、`/` フォーカス要求 → `onChange`、Esc は `onExitCommand` でクリア+blur)+ RECENT/TREE セグメント + TREE は `OutlineGroup(children:)`。`AppState` に `searchText`(didSet で `reconcile`)/ `selectedTab` / `filteredFiles` / `tree` / `visibleLeaves` / `moveSelection`
+- キーボード: `HTMLViewerApp` の **Scene 直下に local key monitor を 1 個**(`onAppear` 設置・`onDisappear` 解除)。`j/k`=`moveSelection`、`r`=`reloadPreview`(未選択 no-op)、`⌘⇧R`=`revealSelectedInFinder`、`/`=検索フォーカス要求。**`isSearchFocused`(@FocusState ミラー)中は j/k/r を透過**
+- **簡略化(申し送り)**: TREE は `OutlineGroup` の既定全展開で描画し、j/k は `allLeaves` を対象。`defaultExpanded`(>40 件で第一階層のみ)/ `ancestors`(祖先展開)は Core 実装・テスト済みだが UI 採用は M9 ポリッシュへ送る(M7 は全展開で機能要件を満たす)
+- スコープ外: 全文検索=D8(本 PR はファイル名のみ)。タブ選択の永続化は未実装
+
+(M8 以降、完了時に追記)

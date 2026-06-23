@@ -24,9 +24,55 @@ final class AppState {
     /// `selectedFile`(HTMLFile 型)は登録フォルダ外の受信で型が決まらないため M2.5 では使わない(合流は M5)。
     private(set) var receivedPaths: [String] = []
 
-    /// RECENT タブ用: mtime 降順。
+    // MARK: - M7: 検索 / タブ / キーボード
+
+    public enum SidebarTab: Sendable { case recent, tree }
+    /// 表示タブ(RECENT / TREE)。
+    var selectedTab: SidebarTab = .recent
+    /// 検索フィールドが first responder か(`@FocusState` のミラー。キーモニタの透過判定に使う)。
+    var isSearchFocused = false
+    /// `/` キーで検索フィールドへフォーカスを要求(インクリメントで発火。SidebarView が監視)。
+    private(set) var focusSearchRequest = 0
+    func requestSearchFocus() { focusSearchRequest &+= 1 }
+    /// インクリメンタル検索クエリ。変化のたびに選択を残存ヒットで維持・消えたら先頭へ。
+    var searchText = "" {
+        didSet { selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves) }
+    }
+
+    private let search: SearchProvider = FilenameSearchProvider()
+
+    /// 検索適用後のファイル(両タブ共通の入力)。
+    private var filteredFiles: [HTMLFile] {
+        search.filter(allFiles, query: searchText)
+    }
+
+    /// RECENT タブ用: 検索適用後を mtime 降順。
     var recentFiles: [HTMLFile] {
-        RecentSorter.sortedByModificationDateDescending(allFiles)
+        RecentSorter.sortedByModificationDateDescending(filteredFiles)
+    }
+
+    /// TREE タブ用: 検索適用後の階層(OutlineGroup は既定で全展開)。
+    var tree: [TreeNode] {
+        TreeBuilder.build(filteredFiles)
+    }
+
+    /// 現タブの可視 leaf 列(j/k の移動対象)。
+    private var visibleLeaves: [HTMLFile] {
+        switch selectedTab {
+        case .recent: return recentFiles
+        case .tree: return TreeBuilder.allLeaves(tree)
+        }
+    }
+
+    /// j(down)/k(up)で選択を移動し即プレビュー。
+    func moveSelection(_ direction: SelectionDirection) {
+        selectedFile = SelectionLogic.next(after: selectedFile, in: visibleLeaves, direction: direction)
+    }
+
+    /// 選択中ファイルを Finder で表示(未選択なら no-op)。
+    func revealSelectedInFinder() {
+        guard let file = selectedFile else { return }
+        revealInFinder(file)
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -57,7 +103,9 @@ final class AppState {
     }
 
     /// 表示中ファイルを再読込する(loadFileURL 再実行。reload() は使わない — docs/03 §2-7)。
+    /// 未選択なら no-op(M7 決定)。
     func reloadPreview() {
+        guard selectedFile != nil else { return }
         reloadToken &+= 1
     }
 

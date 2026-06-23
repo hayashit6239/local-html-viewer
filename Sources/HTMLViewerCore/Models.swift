@@ -23,3 +23,23 @@ public struct HTMLFile: Identifiable, Hashable, Sendable {
         self.relativePath = relativePath
     }
 }
+
+/// TREE タブの階層ノード(M7)。`id` は絶対パス(dir は dir の絶対パス / leaf は file.path)で、
+/// 検索でツリー入力が変わっても OutlineGroup の差分更新・展開状態が崩れないようにする。
+public struct TreeNode: Identifiable, Sendable, Hashable {
+    public let id: String
+    public let name: String
+    /// leaf のとき対応ファイル。dir のとき nil。
+    public let file: HTMLFile?
+    /// nil = leaf。非 nil(空配列含む)= dir。
+    public let children: [TreeNode]?
+
+    public var isLeaf: Bool { children == nil }
+
+    public init(id: String, name: String, file: HTMLFile?, children: [TreeNode]?) {
+        self.id = id
+        self.name = name
+        self.file = file
+        self.children = children
+    }
+}

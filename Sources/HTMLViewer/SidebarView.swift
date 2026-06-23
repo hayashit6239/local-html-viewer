@@ -2,9 +2,10 @@ import AppKit
 import HTMLViewerCore
 import SwiftUI
 
-/// 左サイドバー: 登録フォルダ管理 + RECENT リスト。
+/// 左サイドバー: 登録フォルダ管理 + 検索 + RECENT / TREE リスト。
 struct SidebarView: View {
     @Environment(AppState.self) private var app
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         @Bindable var app = app
@@ -42,23 +43,59 @@ struct SidebarView: View {
 
             Divider().overlay(Color.white.opacity(0.06)).padding(.vertical, 8)
 
-            // ── RECENT ──
-            Text("最近")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Theme.textFaint)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 4)
-
-            List(selection: $app.selectedFile) {
-                ForEach(app.recentFiles) { file in
-                    FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
-                        .tag(Optional(file))
-                        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
-                        .listRowBackground(Color.clear)
-                }
+            // ── 検索 ──
+            HStack(spacing: 7) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11)).foregroundStyle(Theme.textFaint)
+                TextField("検索(/)", text: $app.searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .focused($searchFocused)
+                    .onExitCommand { app.searchText = ""; searchFocused = false }  // Esc: クリア + リストへ
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 16).padding(.bottom, 8)
+            .onChange(of: searchFocused) { _, focused in app.isSearchFocused = focused }
+            .onChange(of: app.focusSearchRequest) { _, _ in searchFocused = true }  // `/` で要求
+
+            // ── タブ ──
+            Picker("", selection: $app.selectedTab) {
+                Text("最近").tag(AppState.SidebarTab.recent)
+                Text("ツリー").tag(AppState.SidebarTab.tree)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 12).padding(.bottom, 6)
+
+            // ── リスト(タブ別)──
+            if app.selectedTab == .recent {
+                List(selection: $app.selectedFile) {
+                    ForEach(app.recentFiles) { file in
+                        FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
+                            .tag(Optional(file))
+                            .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                            .listRowBackground(Color.clear)
+                    }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+            } else {
+                List(selection: $app.selectedFile) {
+                    OutlineGroup(app.tree, children: \.children) { node in
+                        if let file = node.file {
+                            FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
+                                .tag(Optional(file))
+                        } else {
+                            Text(node.name)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Theme.textDim)
+                        }
+                    }
+                    .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                    .listRowBackground(Color.clear)
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+            }
 
             // ── フッタ ──
             Divider().overlay(Color.white.opacity(0.06))
