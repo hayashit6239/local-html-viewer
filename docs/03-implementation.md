@@ -119,6 +119,11 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
 - `WebViewContainer`: 外部ファイルは `allowingReadAccessTo` をファイル単体スコープに切替(登録外の周囲フォルダを晒さない)
 - UI: `ContentView` の M2.5 受信バナーを撤去し、(a) サイドバー/トップバーの EXTERNAL バッジ、(b) 読めない外部ファイルの通知バナー、に置換
 - スコープ外(確定): ライブ監視は M6(登録ルートのみ・M5 と非共有)。再表示は odoc 再受信(`open -b`)で賄う。`r` 再読込=M7 / hook 再発火=M8 は後続
+- **brush-up(2026-06-23)**: PR #22 `/code-review` 指摘を反映
+  - `HTMLFile` の `==` / `hash(into:)` を **path のみ**で実装(同 path / 異 `isExternal` で値が一致するように)。SwiftUI `List(selection:)` の Hashable 照合と `Identifiable.id` を整合させ、EXTERNAL ピン内部化時の selection 同期ずれを根絶(🟡-1 / 🟡-4 同根)
+  - `AppState.rescan` に「ピン内部化検知」を追加: `pinnedExternal.path` が `allFiles` に出現したら `pinnedExternal = nil` + `selectedFile` を内部版 `HTMLFile` に張り替え。declarative 二重解消が `recentFiles` 合成だけでなく `selectedFile` ステートでも一貫する(🟡-1)
+  - `handleOpenedURLs` の `fileExists=false` ブランチで `unreadable` を立てる(ピン中以外の死パスでも silent drop しない)。ピン中の場合は `selectedFile?.path == cpath` なら同時にクリア(🟡-2)
+  - docs/02 §2: 削除検知は **odoc 再受信時のみ**(`r` キー / 再読込ボタン経路は対象外、WebKit エラーで気づく前提)を明文化。受信時の読めないパスは「読めない」表示(ピンしない)を併記(🟡-3 仕様確定)
 
 ### M6(2026-06-23)
 - **着手前スモーク**: `FileWatcherTests` で temp dir に `.html` 作成 → イベント受信(timeLimit 付き)を実証。**FSEvents は CLT + 実行環境で実動**(0.45s で green)→ 撤退路ポーリング(D4/D9)は不要だった。flags `kFSEventStreamCreateFlagFileEvents | UseCFTypes | WatchRoot` も版差なし

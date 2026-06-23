@@ -93,7 +93,13 @@ final class AppState {
                 continue
             }
             guard fm.fileExists(atPath: cpath) else {
-                if cpath == pinnedExternal?.path { pinnedExternal = nil }  // 削除 → ピン落とし
+                // 削除 → ピン落とし & 選択クリア(ピン中なら)。
+                if cpath == pinnedExternal?.path {
+                    pinnedExternal = nil
+                    if selectedFile?.path == cpath { selectedFile = nil }
+                }
+                // ピン中でない死パスでも silent drop しない(🟡-2): 「読めない」表示で UI 無反応を回避。
+                unreadable = url.path
                 continue
             }
             if ExternalOpenPolicy.isInside(cpath, registeredRoots: rootsCanonical) {
@@ -238,6 +244,18 @@ final class AppState {
             guard generation == scanGeneration else { return }
             allFiles = result.files
             scanTruncated = result.truncated
+
+            // EXTERNAL ピンが新規登録フォルダ等で「内部化」されたら、ピンを落として
+            // 内部版に張り替える(declarative 二重解消の一貫性を確保 — 🟡-1):
+            // - WebView の read-access スコープが単体 → ルートに切り替わる
+            // - List(selection:) の Hashable 照合が path のみ(HTMLFile == 修正済み)で一致
+            if let ext = pinnedExternal,
+                let internalVersion = result.files.first(where: { $0.path == ext.path }) {
+                pinnedExternal = nil
+                if selectedFile?.path == ext.path {
+                    selectedFile = internalVersion
+                }
+            }
 
             // 選択中ファイルが消えていたら解除し、未選択なら最新を選ぶ。
             // EXTERNAL ピンは走査結果に出ないため対象外(再走査で選択を奪わない)。
