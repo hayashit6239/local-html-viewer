@@ -20,10 +20,10 @@ Claude が生成する self-contained HTML を閲覧する macOS ネイティブ
 
 各フェーズのステータスは、`plan-progress.json` 上では JSON の `null`(未着手) または以下の文字列(enum) **のみ**を取る:
 
-- **issue(仕様固め)** — 8 段階(`completed review` 後に `ready for implementation` / `starting brush-up` へ分岐、brush-up 後は `waiting for review` に戻して再レビュー):
-  `null` → `created issue` → `waiting for review` → `starting review` → `completed review` → (`ready for implementation` → `closed issue`(終端) | `starting brush-up` → `waiting for review` …)
-- **PR(実装)** — 9 段階(`completed review` 後に `ready for merge` / `starting brush-up` へ分岐、brush-up 後は `waiting for review` に戻して再レビュー):
-  `null` → [`implementation-ready`(任意の前段)] → `created pr` → `waiting for review` → `starting review` → `completed review` → (`ready for merge` → `merged pr`(終端) | `starting brush-up` → `waiting for review` …)
+- **issue(仕様固め)** — 8 段階(`completed review` 後に `ready for implementation` / `starting review work` へ分岐、review work 完了後は `waiting for review` に戻して再レビュー):
+  `null` → `created issue` → `starting review` → `completed review` → (`ready for implementation` → `closed issue`(終端) | `starting review work` → `waiting for review` → `starting review` …)
+- **PR(実装)** — 9 段階(`completed review` 後に `ready for merge` / `starting review work` へ分岐、review work 完了後は `waiting for review` に戻して再レビュー):
+  `null` → [`implementation-ready`(任意の前段)] → `created pr` → `starting review` → `completed review` → (`ready for merge` → `merged pr`(終端) | `starting review work` → `waiting for review` → `starting review` …)
 
 > 紛らわしいので注意: issue 側 `ready for implementation` は `completed review` 後の分岐点(必須)、PR 側 `implementation-ready` は `created pr` 前の任意の前段。役割が違う。
 
@@ -33,7 +33,7 @@ Claude が生成する self-contained HTML を閲覧する macOS ネイティブ
 - GitHub 上で **closed** の issue は review / brush-up の有無に関わらず `closed issue`(終端)、**merged** の PR は `merged pr`(終端)
 - **issue を仕様の正**とし、PR 着手前に最新の issue を再読する(レビュー反映で仕様が更新されている場合があるため)
 - レビューは AI エージェントに**コメントとして残させ、修正は当てさせない**。指摘は作者が検証してから採否を決める(誇張は正確に評価し直す)。詳細: `.github/copilot-instructions.md`
-- **再レビュー発火の運用**: `waiting for review` が初回・再レビューの両方を兼ねるため、作者が `starting brush-up` 経由で `waiting for review` に戻すとき、同時に `lastReviewedStatus` を `null` にリセットする(これだけは作者が触ってよい dedup マーカー)。これがないと wrapper コマンドが「同じ状態」と見て再レビューを発火させない
+- **wrapper による status 自動進行**: `reviewing-untriaged-issues-for-loop`(issue 側)と `reviewing-pr-architecture-for-loop`(PR 側)は、レビュー対象を選別 → `starting review` に進めてからレビュー実行 → 判定で **`ready for implementation`(issue)/ `ready for merge`(PR)**(blocker なし)or `completed review`(blocker あり)に**自動進行**する。`doer ≠ judge` 原則を破る代わりに作者の手動 status 進行を省ける(誤判定時は作者が `waiting for review` に巻き戻して再レビューさせる)。review work(旧 brush-up)後の再レビューは作者が `completed review` → `starting review work` → `waiting for review` と進めるだけで次回 loop が拾う(`lastReviewedStatus` の手動リセットは不要)
 
 ## セキュリティ(公開リポジトリ — 違反は即インシデント)
 
