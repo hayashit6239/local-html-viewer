@@ -5,6 +5,13 @@ import Observation
 
 /// UI を駆動する中心状態。Core の判断ロジックを束ねるオーケストレーション層(Humble Object)。
 /// 走査・除外・ソート・永続化の実体は HTMLViewerCore 側にあり、ここはその結線に徹する。
+///
+/// **隔離**: `@MainActor` を明示する。Package の `.defaultIsolation(MainActor.self)` で
+/// HTMLViewer ターゲットは既定 MainActor だが、Swift 6 strict concurrency / SDK 更新 /
+/// future package 設定変更で前提が崩れたとき、`AppState` 自体に注記が無いと `watchTask` /
+/// `debounceTask` の `for await` / closure 経由で隔離が暗黙にずれる(`selectedFile` /
+/// `pendingWatchPaths` 等への共有可変アクセスで data race の温床)。明示注記で自衛する。
+@MainActor
 @Observable
 final class AppState {
     private let defaults: UserDefaults
