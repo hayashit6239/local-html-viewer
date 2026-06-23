@@ -22,8 +22,12 @@ Claude が生成する self-contained HTML を閲覧する macOS ネイティブ
 
 - **issue(仕様固め)** — 7 段階:
   `null` → `created issue` → `starting review` → `completed review` → `starting brush-up` → `completed brush-up` → `closed issue`(終端)
-- **PR(実装)** — 7 段階:
-  `null` → `created pr` → `starting review` → `completed review` → `starting brush-up` → `completed brush-up` → `merged pr`(終端)
+- **PR(実装)**(レビュー ↔ ブラッシュアップのループ + マージ可判定):
+  `null` → (`implementation-ready` →) `created pr` → `waiting for review` → `starting review` → `completed review` → `starting brush-up` → `waiting for review` → … → `ready for merge` → `merged pr`(終端)
+  - **ループ点は `waiting for review`**: `created pr` 直後の初回レビュー待ちと、`starting brush-up` 後の再レビュー待ちの両方で使う
+  - レビュー対応(ブラッシュアップ)を **実装 + push + PR コメント**まで完了したら status を `waiting for review` に戻す(レビュー対応ワーカーから手番を返す合図)
+  - レビュワーがマージ可能品質と判定したら `ready for merge` に変更する。以後その PR はレビュー対応ワーカー・レビューワーカーいずれの対象からも外れる(merger だけが触る)
+  - 旧 `completed brush-up` は廃止(2026-06-23)。brush-up 完了は `waiting for review` に集約する。**issue 側 enum(`completed brush-up` を含む)は従来どおり**
 
 運用ルール:
 
@@ -31,6 +35,7 @@ Claude が生成する self-contained HTML を閲覧する macOS ネイティブ
 - GitHub 上で **closed** の issue は review / brush-up の有無に関わらず `closed issue`(終端)、**merged** の PR は `merged pr`(終端)
 - **issue を仕様の正**とし、PR 着手前に最新の issue を再読する(レビュー反映で仕様が更新されている場合があるため)
 - レビューは AI エージェントに**コメントとして残させ、修正は当てさせない**。指摘は作者が検証してから採否を決める(誇張は正確に評価し直す)。詳細: `.github/copilot-instructions.md`
+- レビュー対応(ブラッシュアップ)を実装 + push + PR コメントまで完了したら、その PR の status を `waiting for review` に変更する。レビュー対応ワーカーは `ready for merge` / `merged pr` を対象外として無視する
 
 ## セキュリティ(公開リポジトリ — 違反は即インシデント)
 
