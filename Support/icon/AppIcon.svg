@@ -13,8 +13,9 @@
   </defs>
   <!-- 角丸の背景(macOS Big Sur 以降の squircle に近い丸み・200px) -->
   <rect x="0" y="0" width="1024" height="1024" rx="200" ry="200" fill="url(#bg)"/>
-  <!-- 微妙なハイライト -->
-  <rect x="0" y="0" width="1024" height="60" rx="200" ry="200" fill="#FFFFFF" opacity="0.05"/>
+  <!-- 微妙なハイライト(高さ 60 のため rx/ry は SVG 仕様で height/2=30 に clamp される。
+       背景の 200px squircle とは別曲率になる点を踏まえ、実効値の 30 を明示する — M9 review #3) -->
+  <rect x="0" y="0" width="1024" height="60" rx="30" ry="30" fill="#FFFFFF" opacity="0.05"/>
   <!-- < / > ブラケット + 中央のドット(=ファイル) -->
   <g stroke="url(#amber)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <polyline points="368,360 220,512 368,664"/>

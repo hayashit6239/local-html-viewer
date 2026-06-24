@@ -10,13 +10,15 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SVG="$ROOT/Support/icon/AppIcon.svg"
-ICONSET="$ROOT/Support/icon/AppIcon.iconset"
 ICNS="$ROOT/Support/icon/AppIcon.icns"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+# iconset は WORK 配下に作る(リポジトリ内に残骸 `Support/icon/AppIcon.iconset/` を残さない — M9 review #5)。
+ICONSET="$WORK/AppIcon.iconset"
 
-# 1) SVG → 1024 PNG(Quick Look の thumbnail 機能を使う)
-qlmanage -t -s 1024 -o "$WORK" "$SVG" >/dev/null 2>&1
+# 1) SVG → 1024 PNG(Quick Look の thumbnail 機能を使う)。
+# stdout のみ捨て stderr は残す: SVG renderer 不在 / QuickLook 生成エラーの原因を握りつぶさない(M9 review #4)。
+qlmanage -t -s 1024 -o "$WORK" "$SVG" >/dev/null
 BASE="$WORK/AppIcon.svg.png"
 [ -f "$BASE" ] || { echo "qlmanage で PNG を作れませんでした: $BASE"; exit 1; }
 
@@ -38,6 +40,9 @@ gen 512  icon_512x512.png
 # sips でサイズを保証する(iconutil の dimensions reject を防ぐ — M9 review #5)。
 gen 1024 icon_512x512@2x.png
 
-# 3) .icns 生成
+# 3) .icns 生成。先に既存 .icns を消してから生成する。iconutil が失敗(dimensions reject /
+# ディスク満杯等)したら set -e で停止し $ICNS は**消えたまま**になる → 次回 make install の
+# fail-loud(build.sh)で「再生成したのに古い .icns が残る」サイレント不整合を検知できる(M9 review #2)。
+rm -f "$ICNS"
 iconutil -c icns "$ICONSET" -o "$ICNS"
 echo "built: $ICNS"

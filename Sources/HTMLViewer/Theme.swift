@@ -11,7 +11,9 @@ enum Theme {
     static let textFaint = Color(hex: 0x5D5A54)
     static let live = Color(hex: 0x8FCE5A)
 
-    // 間隔・角丸(M9: 1 箇所に集約して画面間の一貫性を担保)
+    // 間隔・角丸(M9: 1 箇所に集約して画面間の一貫性を担保)。
+    // 定数値は**既存の literal call site と一致**させる(配線は M7 マージ後にまとめて行うフォローアップ。
+    // 値が既存と乖離していると「定数を編集したのに見た目が変わらない」罠になるため — M9 review #1)。
     enum Spacing {
         static let xs: CGFloat = 4
         static let sm: CGFloat = 8
@@ -20,7 +22,7 @@ enum Theme {
     }
 
     enum Radius {
-        static let badge: CGFloat = 4
+        static let badge: CGFloat = 3  // FileRowView / ContentView の既存 cornerRadius:3 と一致
         static let button: CGFloat = 6
     }
 }

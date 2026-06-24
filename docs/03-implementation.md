@@ -144,5 +144,12 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
 - **README.md**(新規): セットアップ・hook 連携・キー操作・既知の制約・開発コマンド・docs リンク・MIT。**README はアプリ完成形を記載**(hooks=M8 / j/k=M7 / EXTERNAL=M5 等)。M9 は全マイルストーンの最後にマージする前提のため、M7/M8 マージ時にその実体(`hooks/` ディレクトリ・`make test-hooks`・TREE/キー UI)が揃って README と整合する(M9 review #2: マージ順 M5・M6〔済〕→ M7 → M8 → M9)
 - スコープ(率直): 本ブランチは **M5/M6 を含む**(マージ済み main 由来)。**未マージは M7(TREE/検索/キー)/ M8(hooks)**。M7 申し送りの「TREE 展開ポリシー UI 採用」は M7 PR #26 側で対応済み(本 M では扱わない)。M9 が触る UI は Theme 定数定義のみで、サイドバー/プレビューのモック比較ポリッシュは M7 マージ後の別アクションが妥当(docs/04 §5 M9 に申し送り)
 - スコープ外: 配布パッケージ・公証(D2)、メニューバー常駐(`LSUIElement` は引き続き設定しない)
+- **brush-up 第2ラウンド(2026-06-24・`/code-review high` 5 件)**: すべて採用
+  - #1: `Theme.Radius.badge` を **4 → 3** に整合(`FileRowView`/`ContentView` の既存 `cornerRadius:3` と一致)。配線は M7 後フォローアップのままだが、値を既存と合わせて「定数を編集したのに見た目が変わらない」罠を解消
+  - #2: `build-icon.sh` は `iconutil` 直前に `rm -f "$ICNS"`。iconutil 失敗(set -e 停止)時に**古い .icns が残らず消える** → 次回 `make install` の fail-loud(build.sh)で「再生成したのに古いまま」のサイレント不整合を検知できる
+  - #3: `AppIcon.svg` ハイライト rect の `rx=200`(height=60)を実効 `rx=30` に明示。コメントと実描画の乖離を解消(.icns 再生成。差分は最上部 5% ハイライトの角丸のみで視覚影響は微小)
+  - #4: `qlmanage` の `2>&1` を外し **stderr を残す**(SVG renderer 不在 / QuickLook エラーの原因を握りつぶさない)
+  - #5: iconset を repo 内ではなく `WORK`(mktemp)配下に作成。再生成のたびに `Support/icon/AppIcon.iconset/` 残骸が残らない(trap で自動掃除)
+  - `make icon` で 1024×1024 .icns 再生成・repo に iconset 残骸が出ないことを確認
 
 (M10 以降、完了時に追記)
