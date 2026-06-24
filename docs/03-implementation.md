@@ -151,5 +151,14 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - #4: `qlmanage` の `2>&1` を外し **stderr を残す**(SVG renderer 不在 / QuickLook エラーの原因を握りつぶさない)
   - #5: iconset を repo 内ではなく `WORK`(mktemp)配下に作成。再生成のたびに `Support/icon/AppIcon.iconset/` 残骸が残らない(trap で自動掃除)
   - `make icon` で 1024×1024 .icns 再生成・repo に iconset 残骸が出ないことを確認
+- **brush-up 第3ラウンド(2026-06-24・`/code-review high` 7 件)**: すべて採用
+  - #2: `build-icon.sh` で **BASE が 1024px であることを検証**(`sips -g pixelWidth`)。qlmanage が非 1024 を返したとき `sips -z 1024` が silent upscale して blurry な @2x が .icns 化されるのを fail-loud で防ぐ
+  - #3: `Info.plist` の **`CFBundleVersion` を 1 → 2** に bump。アイコンのみ変更でも `(bundle id + version)` で効く Launch Services の icon cache を無効化し、同名上書き install で旧アイコンが残る誤診断を防ぐ(docs/04 §5 M9 #3 に `killall Dock Finder` のフォールバックも併記)
+  - #4: `build.sh` の icns コピーを **`plutil -extract CFBundleIconFile`** で plist から導出。アイコン名の二重定義(plist と build.sh)を解消し契約一致を機械保証
+  - #5: iconset の `@2x ≡ 次サイズ 1x`(例 16x16@2x = 32 = 32x32)の invariant を sips 二重生成から **`cp`** に置換(無駄な sips 削減 + 片方差し替えの誘惑を断つ)
+  - #6: `README.md` 開発セクションに **`make icon`** を追加(SVG 編集者が .icns 再生成に気付けるよう露出)
+  - #1: `Theme.Radius.button=6` に「design-mock-b 想定値・call site 不在のため未検証」を明示(badge の値整合ルールと一貫)
+  - #7: `Theme.swift` / `AppIcon.svg` のコメントから `— M9 review #N` の process trail を剥離(実体ある rationale は残す。art asset は review より長生きするため)
+  - `make icon` で再生成 .icns はバイト同一(cp ベース化でも内容不変)/ build/test/check 維持
 
 (M10 以降、完了時に追記)

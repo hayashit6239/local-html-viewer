@@ -108,7 +108,7 @@
 |---|---|---|---|---|
 | 1 | .icns 生成 | `bash scripts/build-icon.sh` | `Support/icon/AppIcon.icns` が生成される | ✅ 2026-06-24 |
 | 2 | bundle 組込み | `make install` | `~/Applications/HTMLViewer.app/Contents/Resources/AppIcon.icns` が存在 / `Info.plist` に `CFBundleIconFile=AppIcon` | ✅ 2026-06-24 |
-| 3 | Dock / Launchpad / Finder 表示 | `open -a HTMLViewer` | Dock のアプリアイコンが新しいモノグラム | ⬜(GUI 目視) |
+| 3 | Dock / Launchpad / Finder 表示 | `make install` → `open -a HTMLViewer`(旧アイコンが残る場合 `killall Dock Finder` で LS cache を更新) | Dock のアプリアイコンが新しいモノグラム。`CFBundleVersion` を 2 に bump 済みのため同名上書きでも LS icon cache は無効化される | ⬜(GUI 目視) |
 | 4 | README セットアップ通し | README 手順を初見視点で 1 通り走らせる | 5 分以内にアプリ起動 + フォルダ登録まで完了 | ⬜(GUI 手動) |
 | 5 | TREE 展開ポリシー UI(申し送り) | M7 マージ後に `defaultExpanded` を `SidebarView` に結線 | dir 総数 > 40 で第一階層のみ展開 | ⬜(M7 後フォロー) |
 | 6 | モック比較ポリッシュ(申し送り) | M7 マージ後に `docs/assets/design-mock-b.html` と並べて差分洗い出し | サイドバー余白・アクセント・空状態の表現が揃う | ⬜(M7 後フォロー) |

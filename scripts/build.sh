@@ -35,15 +35,19 @@ cp Support/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 plutil -lint "$APP/Contents/Info.plist"
 
-# .icns コピー(M9: Info.plist の CFBundleIconFile=AppIcon と対応)。
-# Info.plist が AppIcon を**無条件で**参照する以上、.icns 欠落は Dock/Finder で generic
-# アイコンに化けるだけで CI/build に検知シグナルが出ない。契約一致のため fail-loud にする
-# (M9 review #4)。再生成は `make icon`(scripts/build-icon.sh)。
-if [ -f Support/icon/AppIcon.icns ]; then
-	cp Support/icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
-else
-	echo "ERROR: Support/icon/AppIcon.icns が見つかりません(Info.plist の CFBundleIconFile=AppIcon と不一致)。'make icon' で生成してください" >&2
-	exit 1
+# .icns コピー。アイコン名は Info.plist の CFBundleIconFile から導出し、plist を single source
+# として契約一致を機械的に保証する(build.sh に名前を二重定義しない)。Info.plist が icon を
+# 参照する以上、.icns 欠落は Dock/Finder で generic アイコンに化けるだけで CI/build に検知
+# シグナルが出ないため、fail-loud にする。再生成は `make icon`(scripts/build-icon.sh)。
+ICON_NAME="$(plutil -extract CFBundleIconFile raw Support/Info.plist 2>/dev/null || true)"
+if [ -n "$ICON_NAME" ]; then
+	ICON_SRC="Support/icon/$ICON_NAME.icns"
+	if [ -f "$ICON_SRC" ]; then
+		cp "$ICON_SRC" "$APP/Contents/Resources/$ICON_NAME.icns"
+	else
+		echo "ERROR: $ICON_SRC が見つかりません(Info.plist の CFBundleIconFile=$ICON_NAME と不一致)。'make icon' で生成してください" >&2
+		exit 1
+	fi
 fi
 
 echo "==> codesign (ad-hoc)"

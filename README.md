@@ -79,6 +79,7 @@ make test-hooks    # hooks/open-html.sh の入力解析・スロットルを JSO
 make check         # 実パス混入・.gitignore 機能の機械的検証(コミット前ゲート)
 make run           # 直起動(オープンイベント / TCC / UserDefaults はバンドル版とドメインが異なるため検証用は make install)
 make install       # 上記セットアップに同じ
+make icon          # Support/icon/AppIcon.svg 編集後の .icns 再生成(.icns は checked-in binary)
 ```
 
 詳細ドキュメント:
