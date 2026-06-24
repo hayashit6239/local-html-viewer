@@ -3,20 +3,21 @@
 # `open` は OPEN_CMD で stub に差し替え(呼び出し回数を一時ファイルにカウント)。
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)" || exit 1
 HOOK="$ROOT/hooks/open-html.sh"
 PASS=0; FAIL=0
 
-# stub: 呼び出しごとに $OPEN_COUNT_FILE に追記
-TMP="$(mktemp -d)"
+# stub: 呼び出しごとに $OPEN_COUNT_FILE に追記。
+# セットアップ失敗は fail-loud(set -e は run() の rc 捕捉と相性が悪いため各所に || exit 1)。
+TMP="$(mktemp -d)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 OPEN_COUNT_FILE="$TMP/open-calls"
 STUB="$TMP/open-stub"
-cat > "$STUB" <<'EOF'
+cat > "$STUB" <<'EOF' || exit 1
 #!/bin/bash
 printf '%s\n' "$*" >> "$OPEN_COUNT_FILE"
 EOF
-chmod +x "$STUB"
+chmod +x "$STUB" || exit 1
 
 count_calls() {
     [ -r "$OPEN_COUNT_FILE" ] && wc -l < "$OPEN_COUNT_FILE" | tr -d ' ' || echo 0
@@ -97,6 +98,22 @@ if [ "$calls" -eq 2 ]; then
     echo "✔ throttle=0 で透過 (open=$calls)"; PASS=$((PASS+1))
 else
     echo "✘ throttle=0 で透過 expected=2 got=$calls"; FAIL=$((FAIL+1))
+fi
+
+echo "-- state 破損(非数値 epoch)でも算術エラーを出さず open 1 回(M8 review #1)--"
+rm -f "$OPEN_COUNT_FILE"
+STATE="$TMP/state-corrupt"
+mkdir -p "$STATE" || exit 1
+printf 'not-a-number\t/tmp/dup.html\n' > "$STATE/last-open" || exit 1
+stderr_file="$TMP/corrupt-stderr"
+HTMLVIEWER_HOOK_STATE_DIR="$STATE" HTMLVIEWER_HOOK_THROTTLE=5 \
+    OPEN_COUNT_FILE="$OPEN_COUNT_FILE" OPEN_CMD="$STUB" \
+    bash "$HOOK" <<<'{"tool_input":{"file_path":"/tmp/dup.html"}}' 2>"$stderr_file"
+calls=$(count_calls); stderr_bytes=$(wc -c < "$stderr_file" | tr -d ' ')
+if [ "$calls" -eq 1 ] && [ "$stderr_bytes" -eq 0 ]; then
+    echo "✔ 破損 state で open=${calls} / stderr 空"; PASS=$((PASS+1))
+else
+    echo "✘ 破損 state expected open=1/stderr空 got open=${calls} stderr=${stderr_bytes}B"; FAIL=$((FAIL+1))
 fi
 
 echo

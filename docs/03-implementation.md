@@ -104,9 +104,10 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
 
 ### M8(2026-06-24)
 - `hooks/open-html.sh`(新規): stdin JSON から `.tool_input.file_path` を抽出(`jq` → python3 フォールバック)→ `.html`/`.htm` 以外を no-op → 5 秒スロットル(`~/.cache/htmlviewer/last-open` に `<epoch>\t<path>` 記録)→ `open -g -b com.hayashi.htmlviewer`(D7)→ 常に `exit 0`(PostToolUse はブロック不能・stderr 抑止)
-- `hooks/settings.json.example`(新規・最小手書き): `PostToolUse` × `Write|Edit|MultiEdit` matcher。ユーザーが `~/.claude/settings.json` にマージする(全置換でない)。command パスは `$HOME` プレースホルダ
-- `scripts/test-hooks.sh` + `make test-hooks`: JSON fixture で入力解析・拡張子フィルタ・スロットルを検証。`OPEN_CMD` で `open` を stub に差し替え呼び出し回数を計測(`HTMLVIEWER_HOOK_THROTTLE` / `HTMLVIEWER_HOOK_STATE_DIR` で各テストを独立)。**11 ケース green**
+- `hooks/settings.json.example`(新規・最小手書き): `PostToolUse` × `Write|Edit|MultiEdit` matcher。command パスは `$HOME` プレースホルダ。**この example は純 JSON**(Claude Code hooks スキーマ未定義の `_comment` キーを置かない — 将来の strict 検証で弾かれないため。M8 review #2)。**設定手順は本書が正準**: ユーザーは `~/.claude/settings.json` に**マージ**する(全置換ではない)/ `command` パスを自分の clone 先に合わせて書き換える
+- `scripts/test-hooks.sh` + `make test-hooks`: JSON fixture で入力解析・拡張子フィルタ・スロットルを検証。`OPEN_CMD` で `open` を stub に差し替え呼び出し回数を計測(`HTMLVIEWER_HOOK_THROTTLE` / `HTMLVIEWER_HOOK_STATE_DIR` で各テストを独立)。**11 ケース green**。セットアップ(`mktemp` / stub heredoc / `chmod`)失敗は `|| exit 1` で fail-loud にし、CI で fixture 環境が壊れた際の false-pass を防ぐ(M8 review #4)
 - **テスト容易化の知見**: シェル hook は副作用(`open` の呼び出し回数 + 状態ファイルの更新)を観測点にした。Core(Swift)の TDD と非対称だが、シェルの責務が「フィルタ + スロットル + 起動」と少ないため十分担保できる
+- **堅牢化(M8 review)**: `open-html.sh` のスロットルは `last_epoch` を**数値ガード**(`case`)してから算術展開する(state 破損で `$((...))` が stderr エラーを出さない・スロットル抜けで open 継続 — #1)。stdin 読取は `payload="$(cat 2>/dev/null)"`(コマンド置換は exit code 非伝播のため `|| true` は死コード — #3)
 - スコープ外: Bash heredoc 経由の HTML 生成検知(matcher 拡張は誤発火増で送り)・hook 設定の自動インストーラ(マージはユーザー手作業)
 
 ### M4(2026-06-17)

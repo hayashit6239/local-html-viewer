@@ -17,8 +17,9 @@ STATE_DIR="${HTMLVIEWER_HOOK_STATE_DIR:-$HOME/.cache/htmlviewer}"
 STATE_FILE="$STATE_DIR/last-open"
 OPEN_CMD="${OPEN_CMD:-open}"
 
-# stdin から JSON を読む(空でも握りつぶす)
-payload="$(cat 2>/dev/null || true)"
+# stdin から JSON を読む(空でも握りつぶす)。コマンド置換は exit code を伝播しないため
+# `|| true` は不要(M8 review #3)。
+payload="$(cat 2>/dev/null)"
 [ -z "$payload" ] && exit 0
 
 # .tool_input.file_path を抽出(jq 優先、無ければ python3)
@@ -51,15 +52,19 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
 now=$(date +%s)
 if [ -r "$STATE_FILE" ]; then
     # フォーマット: "<epoch>\t<path>"(tab 区切り)
-    last_line="$(tail -n 1 "$STATE_FILE" 2>/dev/null || true)"
+    last_line="$(tail -n 1 "$STATE_FILE" 2>/dev/null)"
     last_epoch="${last_line%%	*}"
     last_path="${last_line#*	}"
-    if [ -n "$last_epoch" ] && [ "$last_path" = "$file_path" ]; then
-        delta=$((now - last_epoch))
-        if [ "$delta" -lt "$THROTTLE_SECONDS" ]; then
-            exit 0
-        fi
-    fi
+    # last_epoch が数値のときだけスロットル判定する。state ファイル破損で非数値が入ると
+    # `$((now - last_epoch))` が算術展開エラーを stderr に出すため、数値ガードで弾く(M8 review #1)。
+    case "$last_epoch" in
+        '' | *[!0-9]*) ;;  # 空 or 非数値 → スロットルせず open に進む(state 破損で詰まらせない)
+        *)
+            if [ "$last_path" = "$file_path" ] && [ "$((now - last_epoch))" -lt "$THROTTLE_SECONDS" ]; then
+                exit 0
+            fi
+            ;;
+    esac
 fi
 printf '%s\t%s\n' "$now" "$file_path" > "$STATE_FILE" 2>/dev/null || true
 
