@@ -1,6 +1,6 @@
 # HTMLViewer — ビルド・検証タスク
 
-.PHONY: build test run install check
+.PHONY: build test test-hooks run install check
 
 # CLT 環境では swift test に Testing.framework の検索パスが自動で渡らないため明示する
 # (素の `swift test` は "no such module 'Testing'" で失敗する — docs/03-implementation.md §5)
@@ -23,6 +23,10 @@ build:
 
 test:
 	swift test $(TEST_FLAGS)
+
+# hooks/open-html.sh の入力処理・拡張子フィルタ・スロットルを JSON fixture で検証(M8)
+test-hooks:
+	bash scripts/test-hooks.sh
 
 # 開発用の直接実行。オープンイベント / TCC / UserDefaults の検証には使えない
 # (バンドル版と挙動が異なる — docs/03-implementation.md §4)
