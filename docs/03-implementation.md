@@ -154,5 +154,16 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - #3/#4: 選択が可視 leaf 外(TREE 折りたたみ / タブ切替で隠れた)のとき j/k が先頭ジャンプしていたのを、`SelectionLogic.next(after:in:fullOrder:direction:)` を追加し**全 leaf 順序基準で同方向の最近可視 leaf へ**移すよう改善(選択維持=プレビューは変えず、移動は j/k 時のみ)。共通パスは既存 `next` に委譲=回帰なし
   - #5: key monitor の修飾判定を `deviceIndependentFlagsMask` で正規化し、`option`/`control` が乗ったキー(⌥r='®' / ⌃r 等)を横取りしないよう全ビューアキー(j/k/r/`/`)に適用
   - テスト計 82(`SelectionLogic` 全順序オーバーロード +2)。#1 の WKWebView フォーカス透過挙動は firstResponder チェーン依存のためユニットテスト対象外 → 作者の GUI 検証に委ねる
+- **brush-up 第3ラウンド(2026-06-24・`/code-review high` 10 件)**:
+  - #1/#4(展開の sticky 化): `expandedDirs` が検索/再走査/タブ切替の自動再計算で**全置換**され、ユーザーの手動折りたたみが消える問題を解消。`userCollapsedDirs: Set<String>`(手動で閉じた dir を記録する overlay)を導入し、`recomputeTreeExpansion` で自動算出集合から差し引く。ただし選択中 leaf の祖先は折りたたみより優先して可視に残す。`setExpanded` が手動展開で overlay 解除・手動折りたたみで記録
+  - #3: `searchText.didSet` で reconcile **後にも** `recomputeTreeExpansion` を呼び、reconcile が選び直した新選択の祖先 dir を展開して可視化(従来は reconcile 前の旧選択で展開していた)
+  - #5: `handleOpenedURLs` が odoc で内部ファイルを選択したあと `recomputeTreeExpansion` を呼ぶ(>40 dir で折りたたみ中でも選択を TREE に可視化)
+  - #6: `rescan` で検索中に rename 等により選択が filter から外れたら可視列へ reconcile(「存在するが検索結果に不可視」を解消)
+  - #8: `TreeBuilder` の dir ノード id を**末尾 `/` 付き**にして leaf(`file.path`)と区別。dir 名と同名の `.html` ファイルが同階層に並んでも id 衝突しない(`expandedDirs` 誤照合・Identifiable 違反を防ぐ)。`ancestors`/`defaultExpanded`/`visibleLeaves` は全て `TreeNode.id` 参照のため `dirID` 1 箇所で一貫
+  - #9: key monitor の `⌘⇧R`(reveal)も `option`/`control` を弾く(`⌘⇧⌥R` 等の別 bind と衝突しない・`r` と対称)
+  - #2: `/` ケースも `shift` を弾く(`Shift+/`='?' を横取りしない・`r` と対称)
+  - #10: `keyEventShouldYieldToFocus` で key window が `NSPanel`(`NSOpenPanel` 等のモーダル補助ダイアログ)のときビューアキーを透過(ダイアログ背後で選択移動/reload が走るのを防ぐ。本アプリは単一 Window 設計)
+  - **#7 は不採用(spec 準拠)**: 「検索中に選択がヒットから外れると reconcile が先頭(=条件次第で EXTERNAL ピン)を選びプレビューが変わる」件は、issue #18 状態保持規則①「消えたら先頭」の仕様どおりの挙動。ピンは検索クエリにマッチした時のみ可視化される(第2ラウンド #2)ため、可視先頭を選ぶのは整合的。仕様を曲げてまで非外部優先にはしない
+  - テスト計 83(`TreeBuilder` dir/leaf id 衝突回避 +1)。sticky 折りたたみ・odoc 展開・NSPanel 透過は AppState/AppKit 層のため GUI 検証は作者に委ねる
 
 (M8 以降、完了時に追記)

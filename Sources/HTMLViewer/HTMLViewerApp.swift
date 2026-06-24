@@ -52,8 +52,10 @@ private func installKeyMonitor(_ app: AppState) -> Any? {
         case "j" where !cmd && !optOrCtrl: app.moveSelection(.down); return nil
         case "k" where !cmd && !optOrCtrl: app.moveSelection(.up); return nil
         case "r" where !cmd && !shift && !optOrCtrl: app.reloadPreview(); return nil
-        case "R" where cmd && shift: app.revealSelectedInFinder(); return nil
-        case "/" where !cmd && !optOrCtrl: app.requestSearchFocus(); return nil
+        // ⌘⇧R も option/control は弾く(⌘⇧⌥R 等の別アプリ bind と衝突しない — M7 review #9)。
+        case "R" where cmd && shift && !optOrCtrl: app.revealSelectedInFinder(); return nil
+        // Shift+/ は '?' を出すため横取りしない('r' と対称に shift も弾く — M7 review #2)。
+        case "/" where !cmd && !shift && !optOrCtrl: app.requestSearchFocus(); return nil
         default: return event
         }
     }
@@ -65,7 +67,12 @@ private func installKeyMonitor(_ app: AppState) -> Any? {
 /// content view のため、responder チェーンを WKWebView までさかのぼって判定する(M7 review #1)。
 @MainActor
 private func keyEventShouldYieldToFocus() -> Bool {
-    guard let responder = NSApp.keyWindow?.firstResponder else { return false }
+    guard let keyWindow = NSApp.keyWindow else { return false }
+    // モーダルパネル/シート(NSOpenPanel・NSSavePanel 等は NSPanel サブクラス)が key の
+    // ときはビューアキーを横取りしない。ダイアログ背後で選択移動 / reload が走るのを防ぐ
+    // (本アプリは単一 Window 設計のため、key が NSPanel = 補助ダイアログとみなせる — M7 review #10)。
+    if keyWindow is NSPanel { return true }
+    guard let responder = keyWindow.firstResponder else { return false }
     if responder is NSText { return true }  // フィールドエディタ(NSTextField 編集中)
     var view = responder as? NSView
     while let current = view {

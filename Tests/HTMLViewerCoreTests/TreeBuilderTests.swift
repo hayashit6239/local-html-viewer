@@ -18,7 +18,7 @@ struct TreeBuilderTests {
         let tree = TreeBuilder.build(files)
         #expect(tree.count == 1)
         let root = tree[0]
-        #expect(root.id == "/R" && root.children != nil)
+        #expect(root.id == "/R/" && root.children != nil)  // dir id は末尾 "/"(leaf と区別)
         // dir(sub) 先・leaf(a.html) 後
         #expect(root.children?.map(\.name) == ["sub", "a.html"])
         let sub = root.children!.first!
@@ -40,11 +40,11 @@ struct TreeBuilderTests {
     func visibleLeaves() {
         let files = [f(root: "/R", rel: "a.html"), f(root: "/R", rel: "sub/b.html")]
         let tree = TreeBuilder.build(files)
-        // ルートのみ展開 → sub 配下は不可視、a.html のみ
-        let rootOnly = TreeBuilder.visibleLeaves(tree, expanded: ["/R"])
+        // ルートのみ展開 → sub 配下は不可視、a.html のみ(dir id は末尾 "/")
+        let rootOnly = TreeBuilder.visibleLeaves(tree, expanded: ["/R/"])
         #expect(rootOnly.map(\.name) == ["a.html"])
         // sub も展開 → b.html も可視
-        let all = TreeBuilder.visibleLeaves(tree, expanded: ["/R", "/R/sub"])
+        let all = TreeBuilder.visibleLeaves(tree, expanded: ["/R/", "/R/sub/"])
         #expect(Set(all.map(\.name)) == ["a.html", "b.html"])
     }
 
@@ -60,14 +60,31 @@ struct TreeBuilderTests {
         let files = [f(root: "/R", rel: "x/y/z.html")]
         let tree = TreeBuilder.build(files)
         let anc = TreeBuilder.ancestors(ofLeaf: "/R/x/y/z.html", in: tree)
-        #expect(anc == ["/R", "/R/x", "/R/x/y"])
+        #expect(anc == ["/R/", "/R/x/", "/R/x/y/"])  // dir id は末尾 "/"
     }
 
     @Test("展開ポリシー: 閾値以下は全 dir 展開")
     func defaultExpandedAll() {
         let files = [f(root: "/R", rel: "sub/b.html"), f(root: "/R", rel: "c.html")]
         let tree = TreeBuilder.build(files)
-        #expect(TreeBuilder.defaultExpanded(tree) == ["/R", "/R/sub"])
+        #expect(TreeBuilder.defaultExpanded(tree) == ["/R/", "/R/sub/"])
+    }
+
+    @Test("dir/leaf id 衝突回避: 同名 .html の dir と file が同階層でも id が異なる")
+    func dirLeafIdNoCollision() {
+        // report.html(dir、配下に index.html)と report.html(file)が同一親に並ぶ
+        let files = [
+            f(root: "/R", rel: "report.html/index.html"),
+            f(root: "/R", rel: "report.html"),
+        ]
+        let tree = TreeBuilder.build(files)
+        let root = tree[0]
+        let children = root.children ?? []
+        let dirNode = children.first { !$0.isLeaf }
+        let leafNode = children.first { $0.isLeaf }
+        #expect(dirNode?.id == "/R/report.html/")   // dir は末尾 "/"
+        #expect(leafNode?.id == "/R/report.html")   // leaf は file.path(末尾なし)
+        #expect(dirNode?.id != leafNode?.id)         // 衝突しない
     }
 
     @Test("展開合成: 非検索・未選択は defaultExpanded と一致")
@@ -86,7 +103,7 @@ struct TreeBuilderTests {
         let set = TreeBuilder.expansionSet(
             for: tree, searching: false, selectedLeafPath: "/R/x/y/z.html"
         )
-        #expect(set.isSuperset(of: ["/R", "/R/x", "/R/x/y"]))
+        #expect(set.isSuperset(of: ["/R/", "/R/x/", "/R/x/y/"]))
     }
 
     @Test("展開合成: 検索中は全ヒットの祖先を展開して可視化")
@@ -95,6 +112,6 @@ struct TreeBuilderTests {
         let tree = TreeBuilder.build(files)
         // 検索中フラグで、ヒット(= フィルタ後 leaf)の祖先がすべて展開される
         let set = TreeBuilder.expansionSet(for: tree, searching: true, selectedLeafPath: nil)
-        #expect(set.isSuperset(of: ["/R", "/R/deep", "/R/deep/nested"]))
+        #expect(set.isSuperset(of: ["/R/", "/R/deep/", "/R/deep/nested/"]))
     }
 }

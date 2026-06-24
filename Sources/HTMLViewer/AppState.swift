@@ -45,33 +45,50 @@ final class AppState {
     private(set) var focusSearchRequest = 0
     func requestSearchFocus() { focusSearchRequest &+= 1 }
     /// インクリメンタル検索クエリ。変化のたびに展開を取り直し、選択を残存ヒットで維持・消えたら先頭へ。
-    /// 展開を先に更新するのは、reconcile の入力 `visibleLeaves` が `expandedDirs` に依存するため。
+    /// 展開を 2 回取り直すのは: ①reconcile の入力 `visibleLeaves` が `expandedDirs` に依存するため
+    /// 先に検索ヒットを展開し、②reconcile が選び直した新選択の祖先も展開して可視化するため(M7 review #3)。
     var searchText = "" {
         didSet {
             recomputeTreeExpansion()
             selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+            recomputeTreeExpansion()
         }
     }
 
     /// TREE タブで展開中の dir id 集合(`DisclosureGroup` の isExpanded バインディングの源)。
     /// 既定展開ポリシー・検索ヒット/選択の親 dir 自動展開・ユーザー手動トグルを束ねる(issue #18 決定)。
     private(set) var expandedDirs: Set<String> = []
+    /// ユーザーが**明示的に折りたたんだ** dir(sticky)。検索/再走査/タブ切替の自動再計算で
+    /// 勝手に開き直さないための overlay(M7 review #1/#4)。手動展開で解除。
+    private var userCollapsedDirs: Set<String> = []
 
     /// 現在の状態(検索中か / 選択中 leaf)から TREE 展開集合を `TreeBuilder` で取り直す。
+    /// 自動算出した展開集合から「ユーザーが閉じた dir」を差し引く(sticky 折りたたみ)。
+    /// ただし選択中 leaf を見せるための祖先は折りたたみより優先して残す(選択は常に可視)。
     private func recomputeTreeExpansion() {
-        expandedDirs = TreeBuilder.expansionSet(
+        var set = TreeBuilder.expansionSet(
             for: tree,
             searching: !searchText.isEmpty,
             selectedLeafPath: selectedFile?.path
         )
+        let selectionAncestors = selectedFile.map { TreeBuilder.ancestors(ofLeaf: $0.path, in: tree) } ?? []
+        set.subtract(userCollapsedDirs.subtracting(selectionAncestors))
+        expandedDirs = set
     }
 
     /// dir が展開中か(`SidebarView` の `DisclosureGroup` バインディング用)。
     func isExpanded(_ dirID: String) -> Bool { expandedDirs.contains(dirID) }
 
-    /// dir の展開/折りたたみをユーザー操作で切り替える。
+    /// dir の展開/折りたたみをユーザー操作で切り替える。手動操作は `userCollapsedDirs` に記録し、
+    /// 後続の自動再計算で意図が保持されるようにする(M7 review #1)。
     func setExpanded(_ dirID: String, _ expanded: Bool) {
-        if expanded { expandedDirs.insert(dirID) } else { expandedDirs.remove(dirID) }
+        if expanded {
+            expandedDirs.insert(dirID)
+            userCollapsedDirs.remove(dirID)  // 手動展開で sticky collapse を解除
+        } else {
+            expandedDirs.remove(dirID)
+            userCollapsedDirs.insert(dirID)  // 手動折りたたみを sticky 記録
+        }
     }
 
     private let search: SearchProvider = FilenameSearchProvider()
@@ -211,6 +228,7 @@ final class AppState {
         if let inter = lastInternal {
             selectedFile = inter
             unreadableExternalPath = nil
+            recomputeTreeExpansion()  // odoc で選んだ内部ファイルの祖先 dir を TREE で可視化(M7 review #5)
         } else if lastExternal != nil {
             selectedFile = pinnedExternal  // 内部が無ければ外部ピンを選択
         }
@@ -358,6 +376,13 @@ final class AppState {
             }
             // 走査でツリー構造が変わったので展開を取り直す(既定ポリシー + 選択の親 dir 自動展開)。
             recomputeTreeExpansion()
+            // 検索中に rename 等で選択が filter から外れたら可視列へ reconcile し、
+            // 「ファイルは存在するが検索結果に不可視」状態を解消する(M7 review #6)。
+            if !searchText.isEmpty, let sel = selectedFile,
+                !visibleLeaves.contains(where: { $0.id == sel.id }) {
+                selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+                recomputeTreeExpansion()
+            }
         }
     }
 }

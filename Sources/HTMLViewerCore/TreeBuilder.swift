@@ -14,13 +14,19 @@ public enum TreeBuilder {
                 (components: ($0.relativePath as NSString).pathComponents, file: $0)
             }
             return TreeNode(
-                id: root,
+                id: dirID(root),
                 name: (root as NSString).lastPathComponent,
                 file: nil,
                 children: level(parent: root, entries: entries)
             )
         }
     }
+
+    /// dir ノードの id は**末尾 `/` 付き**にして leaf(= `file.path`、末尾スラッシュ無し)と区別する。
+    /// dir 名と同名の `.html` ファイルが同階層に並んでも id が衝突しない(SwiftUI Identifiable /
+    /// `expandedDirs` の誤照合を防ぐ — M7 review #8)。`ancestors`/`defaultExpanded`/`visibleLeaves`
+    /// はすべて `TreeNode.id` を参照するため、この 1 箇所の付与で一貫する。
+    private static func dirID(_ path: String) -> String { path + "/" }
 
     private static func level(
         parent: String,
@@ -39,7 +45,7 @@ public enum TreeBuilder {
         }
         let dirs = groups.keys.sorted().map { dir -> TreeNode in
             let dirPath = parent + "/" + dir
-            return TreeNode(id: dirPath, name: dir, file: nil, children: level(parent: dirPath, entries: groups[dir]!))
+            return TreeNode(id: dirID(dirPath), name: dir, file: nil, children: level(parent: dirPath, entries: groups[dir]!))
         }
         return dirs + leaves.sorted { $0.name < $1.name }
     }
