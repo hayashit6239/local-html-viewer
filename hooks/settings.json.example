@@ -1,0 +1,16 @@
+{
+  "_comment": "ユーザーの ~/.claude/settings.json に **マージ** してください(全置換ではありません)。command パスは環境に合わせて書き換えてください。",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/Codes/local-html-viewer/hooks/open-html.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
