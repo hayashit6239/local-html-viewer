@@ -29,7 +29,7 @@
 | M4 | WKWebView プレビュー + 起動時最新表示 + reveal + JS パネル | クリックでプレビュー / 起動直後に最新表示 / `alert()` fixture でダイアログ表示 | ✅ 2026-06-17(`NavigationPolicy` 5 テスト → 計 33 green、build/起動スモーク OK。レンダリング・JS ダイアログ・reveal は §5 手動チェックリストで担保) |
 | M5 | 外部オープン完成(EXTERNAL ピン留め。監視は M6 へ集約しスコープ外) | 外部 `.html` を `open -b` → 先頭に EXTERNAL ピン + プレビュー / 内部は通常選択(二重表示なし) | ✅ 2026-06-23(`ExternalOpenPolicy` 6 テスト → 計 51 green。バンドルで外部オープン・再受信・異常系クラッシュなしを確認。ピン+プレビューの目視は §5)|
 | M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 典型条件(~100KB・rescan 非伴)で 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | ✅ 2026-06-23(着手前スモークで FSEvents 実動実証 → `FileWatcher` 統合 + `WatchEventPolicy`/`Debounce` 単体で計 61 green。live reload / scroll の目視は §5)|
-| M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / `swift test` 0 | — |
+| M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / 展開ポリシー UI 配線 / `swift test` 0 | ⚠️ 部分(Core ✅ / GUI 未実施)2026-06-24(`TreeBuilder`(`expansionSet`/`allDirIDs`)/`SearchProvider`/`SelectionLogic` 計 84 green、build/起動スモーク OK。**§5 手動チェックリスト 11 行はすべて ⬜**=キーモニタ透過条件〔WKWebView responder / NSPanel / option-control / Shift+/〕・DisclosureGroup 展開 UX は単体テスト不能のため**マージ前に作者の GUI 確認が必要**。03 §5 M7 / M7 review #8)|
 | M8 | hook + settings example | `scripts/test-hooks.sh` が 0 / 実セッションで Write → 自動表示 | ✅ 2026-06-24(`make test-hooks` 19/19 green。実 Claude Code セッションでの自動表示は §5 手動) |
 | M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | — |
 
@@ -98,7 +98,27 @@
 | 5 | 削除時挙動 | 表示中ファイルを削除 | 次イベントで rescan → 最新再選択(M4 挙動) | ⬜(GUI 目視) |
 | 6 | churn 暴走なし | `node_modules` 配下を大量変更 | 再走査が暴走しない(ignore 無視) | ⬜(GUI 目視) |
 
-> 注: Core(`FileWatcher` 統合 / `WatchEventPolicy` / `Debounce`)は `make test` で閉じる。live reload・スクロール維持の体感は GUI 手動。100KB/500KB/1MB の再描画時間の実測は GUI 目視項目に含める。
+> 注: Core(`FileWatcher` 統合 / `WatchEventPolicy` / `Debounce`)は `make test` で閉じる。live reload・スクロール維持の体感は GUI 手動。100KB/500KB/1MB の再描画時間の実測は GUI 目視項目に含める(M6 brush-up 🟡-1 のフォローアップ TODO: 実測 1 行を作者が追記)。
+
+### M7: TREE タブ + 検索 + キーボード
+
+実施: 2026-06-23(`make install` 後のバンドル版・合成 HTML)。Core は `make test` で担保。
+
+| # | 項目 | 手順 | 期待 | 結果 |
+|---|---|---|---|---|
+| 1 | セグメント切替 | 「最近」「ツリー」を切替 | RECENT(mtime 降順)/ TREE(階層)が切り替わる・選択維持 | ⬜(GUI 目視) |
+| 2 | 検索 | 検索フィールドに入力 | 両タブが即時フィルタ・ヒット 0 件でも破綻しない | ⬜(GUI 目視) |
+| 3 | `/` フォーカス | リストフォーカス時に `/` | 検索フィールドへフォーカス | ⬜(GUI 目視) |
+| 4 | Esc クリア | 検索入力中に Esc | クエリクリア + リストへ復帰 | ⬜(GUI 目視) |
+| 5 | j/k 移動 | リストで j/k | 選択が上下移動し即プレビュー(端クランプ) | ⬜(GUI 目視) |
+| 6 | 検索中の透過 | 検索フォーカス中に j/k/r | テキスト入力として扱う(ビューア操作にならない) | ⬜(GUI 目視) |
+| 7 | r / ⌘⇧R | リストで `r` / `⌘⇧R` | 再読込 / Finder 表示(未選択なら no-op) | ⬜(GUI 目視) |
+| 8 | TREE 展開 | ツリータブで dir | DisclosureGroup で階層展開/折りたたみ・leaf 選択で即プレビュー | ⬜(GUI 目視) |
+| 9 | 既定展開ポリシー | dir 総数 ≤ 40 / > 40 のフォルダで TREE 起動 | ≤40 は全展開・>40 は第一階層のみ展開 | ⬜(GUI 目視) |
+| 10 | 親 dir 自動展開 | 折りたたみ dir 内の leaf を検索/選択で指す | 親 dir が自動展開され選択が可視化 | ⬜(GUI 目視) |
+| 11 | 折りたたみ中の j/k | dir を折りたたんで j/k 移動 | 折りたたみ dir 配下の leaf は飛ばす(可視 leaf のみ移動) | ⬜(GUI 目視) |
+
+> 注: Core(`TreeBuilder`/`SearchProvider`/`SelectionLogic`、展開合成 `expansionSet` 含む)は `make test` で閉じる。キーモニタ・@FocusState・DisclosureGroup 展開 UX の体感は GUI 手動。展開ポリシー(>40 第一階層のみ / 親 dir 自動展開 / 検索ヒット展開)は M7 brush-up(2026-06-24)で UI 配線済み(Core `expansionSet` + 再帰 `DisclosureGroup`)。
 
 ### M8: Claude Code hook(open-html.sh + settings example)
 

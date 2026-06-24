@@ -148,4 +148,48 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - 🟡-2: **debounce の Core 純化(clock 注入式)は M9 ポリッシュ判断送り**で恒久化を明示(レビュー提案 (B))。Core 側は `Debounce.coalesce`(events 列 → fired 列の純関数)で意味論回帰を固定 + AppState は Task cancel + `Task.sleep` でランタイム実装、という二層構造を意図的に受け入れる。actor/clock 駆動への昇格は M9 で他のポリッシュとまとめて判断する
   - 🟡-1(典型条件 ~100KB の実測 1 行記録)は GUI 操作が必要なため、本 brush-up では **未充足のまま残置**。作者が手動 stopwatch で 100KB / 500KB / 1MB の再描画時間を計測 → `docs/04` M6 §5 注に追記して closure する(マージブロッカーではないがフォローアップ TODO)
 
-(M7 以降、完了時に追記)
+### M7(2026-06-23)
+- Core(TDD): `TreeBuilder`(階層構築・`allLeaves`/`visibleLeaves`/`defaultExpanded`/`ancestors`、ID は絶対 path)/ `SearchProvider`(`FilenameSearchProvider`: NFC 正規化後 case-insensitive 部分一致、D8 再設計前提)/ `SelectionLogic`(`next` クランプ移動 + `reconcile` フィルタ後保持、照合は id)/ `TreeNode` モデル。テスト計 61
+- UI(Humble): `SidebarView` に検索フィールド(`@FocusState`、`/` フォーカス要求 → `onChange`、Esc は `onExitCommand` でクリア+blur)+ RECENT/TREE セグメント。`AppState` に `searchText`(didSet で展開取り直し + `reconcile`)/ `selectedTab` / `filteredFiles` / `tree` / `visibleLeaves` / `moveSelection`
+- キーボード: `HTMLViewerApp` の **Scene 直下に local key monitor を 1 個**(`onAppear` 設置・`onDisappear` 解除)。`j/k`=`moveSelection`、`r`=`reloadPreview`(未選択 no-op)、`⌘⇧R`=`revealSelectedInFinder`、`/`=検索フォーカス要求。**`isSearchFocused`(@FocusState ミラー)中は j/k/r を透過**
+- スコープ外: 全文検索=D8(本 PR はファイル名のみ)。タブ選択の永続化は未実装
+- **brush-up(2026-06-24)**: PR #26 `/code-review` 指摘を反映
+  - 🟡-1: 展開ポリシーを **UI 配線して issue #18 決定を充足**(初回レビューで「Core 実装済みだが UI 未採用」と指摘されていた簡略化を撤回)。`TreeBuilder.expansionSet(for:searching:selectedLeafPath:)` を Core に追加(`defaultExpanded` + 検索ヒット祖先 + 選択 leaf 祖先を合成・純関数・テスト 3 本追加)。`AppState` に `expandedDirs: Set<String>` + `recomputeTreeExpansion()`(searchText/selectedTab/rescan で取り直し)+ `isExpanded`/`setExpanded`。`SidebarView` の `OutlineGroup`(常時全展開・外部バインド不可)を **再帰 `DisclosureGroup(isExpanded:)`**(`TreeRowsView`)に置換し、`expandedDirs` にバインド。`visibleLeaves`(j/k 対象)も `allLeaves` → `visibleLeaves(tree, expanded:)` に切替えて折りたたみ dir を飛ばす。`recentFiles` は検索フィルタ(M7)と EXTERNAL ピン合成(M5)の両方を通す(filter → sort → compose)
+  - 🟢-2: key monitor の `case "r"` を `where !cmd && !shift` に明示限定 + コメントで Shift+R="R" の分岐を説明(可読性)
+  - 🟢-1(visibleLeaves 二重計算)/ 🟢-3(`FileWatcher.events` single consumer・M7 では未使用)は M9/後続送りで据え置き
+  - テスト計 64(`TreeBuilder.expansionSet` +3)。展開 UX の目視確認は作者の GUI 検証に委ねる(再帰 DisclosureGroup の展開/折りたたみ挙動はユニットテスト対象外)
+- **brush-up 第2ラウンド(2026-06-24・`/code-review high` 5 件)**:
+  - #1: key monitor がテキスト入力フォーカス(検索フィールド + **プレビュー WKWebView 内の `<input>`/`<textarea>`**)を透過するよう、`isSearchFocused` に加えて `NSApp.keyWindow?.firstResponder` チェーン(`NSText` / `WKWebView` 祖先)を判定(`keyEventShouldYieldToFocus`)。in-page フォーム入力が j/k/r/`/` に飲まれる不具合を解消
+  - #2: `recentFiles` で EXTERNAL ピンも検索クエリでフィルタ(`search.filter([pin], query:).first`)。非マッチのピンが検索結果に居残る・j/k 可視列に混入する不具合を解消
+  - #3/#4: 選択が可視 leaf 外(TREE 折りたたみ / タブ切替で隠れた)のとき j/k が先頭ジャンプしていたのを、`SelectionLogic.next(after:in:fullOrder:direction:)` を追加し**全 leaf 順序基準で同方向の最近可視 leaf へ**移すよう改善(選択維持=プレビューは変えず、移動は j/k 時のみ)。共通パスは既存 `next` に委譲=回帰なし
+  - #5: key monitor の修飾判定を `deviceIndependentFlagsMask` で正規化し、`option`/`control` が乗ったキー(⌥r='®' / ⌃r 等)を横取りしないよう全ビューアキー(j/k/r/`/`)に適用
+  - テスト計 82(`SelectionLogic` 全順序オーバーロード +2)。#1 の WKWebView フォーカス透過挙動は firstResponder チェーン依存のためユニットテスト対象外 → 作者の GUI 検証に委ねる
+- **brush-up 第3ラウンド(2026-06-24・`/code-review high` 10 件)**:
+  - #1/#4(展開の sticky 化): `expandedDirs` が検索/再走査/タブ切替の自動再計算で**全置換**され、ユーザーの手動折りたたみが消える問題を解消。`userCollapsedDirs: Set<String>`(手動で閉じた dir を記録する overlay)を導入し、`recomputeTreeExpansion` で自動算出集合から差し引く。ただし選択中 leaf の祖先は折りたたみより優先して可視に残す。`setExpanded` が手動展開で overlay 解除・手動折りたたみで記録
+  - #3: `searchText.didSet` で reconcile **後にも** `recomputeTreeExpansion` を呼び、reconcile が選び直した新選択の祖先 dir を展開して可視化(従来は reconcile 前の旧選択で展開していた)
+  - #5: `handleOpenedURLs` が odoc で内部ファイルを選択したあと `recomputeTreeExpansion` を呼ぶ(>40 dir で折りたたみ中でも選択を TREE に可視化)
+  - #6: `rescan` で検索中に rename 等により選択が filter から外れたら可視列へ reconcile(「存在するが検索結果に不可視」を解消)
+  - #8: `TreeBuilder` の dir ノード id を**末尾 `/` 付き**にして leaf(`file.path`)と区別。dir 名と同名の `.html` ファイルが同階層に並んでも id 衝突しない(`expandedDirs` 誤照合・Identifiable 違反を防ぐ)。`ancestors`/`defaultExpanded`/`visibleLeaves` は全て `TreeNode.id` 参照のため `dirID` 1 箇所で一貫
+  - #9: key monitor の `⌘⇧R`(reveal)も `option`/`control` を弾く(`⌘⇧⌥R` 等の別 bind と衝突しない・`r` と対称)
+  - #2: `/` ケースも `shift` を弾く(`Shift+/`='?' を横取りしない・`r` と対称)
+  - #10: `keyEventShouldYieldToFocus` で key window が `NSPanel`(`NSOpenPanel` 等のモーダル補助ダイアログ)のときビューアキーを透過(ダイアログ背後で選択移動/reload が走るのを防ぐ。本アプリは単一 Window 設計)
+  - **#7 は不採用(spec 準拠)**: 「検索中に選択がヒットから外れると reconcile が先頭(=条件次第で EXTERNAL ピン)を選びプレビューが変わる」件は、issue #18 状態保持規則①「消えたら先頭」の仕様どおりの挙動。ピンは検索クエリにマッチした時のみ可視化される(第2ラウンド #2)ため、可視先頭を選ぶのは整合的。仕様を曲げてまで非外部優先にはしない
+  - テスト計 83(`TreeBuilder` dir/leaf id 衝突回避 +1)。sticky 折りたたみ・odoc 展開・NSPanel 透過は AppState/AppKit 層のため GUI 検証は作者に委ねる
+- **brush-up 第4ラウンド(2026-06-24・`/code-review high` 10 件 — 第3ラウンドの複雑化が生んだ派生 defect)**:
+  - #1: `moveSelection` は `SelectionLogic.next` が nil(全 dir 折りたたみ等で可視列が空)のとき**現選択を維持**し、プレビューを消さない(`selectedFile = nil` の代入をやめる)
+  - #7: `expansionSet(searching:)` を leaf ごとの `ancestors` O(L×N) DFS から **`allDirIDs` の O(N)** に置換(フィルタ後ツリーは全 leaf がヒットなので全 dir 展開と等価)。検索 1 文字あたりの main-thread ノード訪問を L×N → N に削減
+  - #5: TREE の `List(selection:)` を **nil 書込を無視する `Binding`** に。tag 無し dir 行(DisclosureGroup ラベル)クリックで `selectedFile` が nil 化しプレビューが消える macOS 挙動を防ぐ(プログラム側の nil 化は AppState 直書きなので無影響)
+  - #9: footer を `recentFiles.count`(検索フィルタ後)から **`allFiles.count`(総在庫)** 表示に。検索ヒット 0 で「0 ファイル」となりスキャン失敗/消失と誤解されるのを防ぎ、絞り込み中は「ヒット / 総数」表記
+  - #2: `handleOpenedURLs` で odoc が開いた内部ファイルが検索 filter で隠れる場合 **`searchText` をクリア**して可視化(preview に映るのにリスト・j/k から不可視になるのを解消)
+  - #4: `rescan` で `userCollapsedDirs` を現ツリーの dir id に `formIntersection` で prune。削除フォルダ id の蓄積リーク防止 + 同パス再登録時に「新規フォルダ」が前回の sticky 折りたたみを引き継がない
+  - #3: `searchText.didSet` の reconcile を、**EXTERNAL ピン選択中はスキップ**(ピンは検索リストに出ないため reconcile が先頭へ飛ばし外部プレビューがスワップするのを防ぐ)
+  - #10: `TreeBuilder` の dir パス結合を防御化(`joinDir`/`dirID` が trailing slash 付き root=`/` で `//` を作らない)。回帰テスト +1
+  - #8: `docs/04` M7 行を `✅` → **`⚠️ 部分(Core ✅ / GUI 未実施)`** に修正。§5 手動 11 行が全 ⬜ でマージ前に作者の GUI 確認が必要な実態を明示(CLAUDE.md 進捗管理規約に合わせる)
+  - **#6 は対応済みとして据え置き**: 「rescan fallback が折りたたみ祖先で alphabetic-first に化ける」件は、第3ラウンドで導入した `recomputeTreeExpansion` の「選択中 leaf の祖先は折りたたみより優先して可視に残す」ロジックにより、fallback 選択(mtime 最新)の祖先が展開され可視化されるため発生しない(reconcile も走らない)
+  - テスト計 84(trailing slash root の `//` 回避 +1)。selection nil 化防止・NSPanel/WKWebView 透過・DisclosureGroup 選択挙動は AppKit/SwiftUI 層のため**マージ前の GUI 検証が必須**(docs/04 §5 M7)
+- **brush-up 第5ラウンド(2026-06-24・`/code-review high` 3 件 — 第4ラウンドの派生 + Caps Lock エッジ)**: すべて採用
+  - #1: `rescan` の `userCollapsedDirs.formIntersection` を、検索フィルタ後の `tree` ではなく **全ファイル(`result.files`)由来のツリー**で行う。検索中に rescan が走ったとき一時的に隠れている dir が evict され、検索クリア後に折りたたみ意図が失われる回帰を解消
+  - #2: `rescan` の reconcile(round-4 #6)に **`!sel.isExternal` ガード**を追加(`searchText.didSet` と対称)。TREE で rescan 時に EXTERNAL ピンが内部ファイルへすり替わり外部プレビューが消えるのを防ぐ
+  - #3: key monitor で `charactersIgnoringModifiers` を **小文字に正規化**してから判定。Caps Lock 有効時に 'r' が 'R' になり reload/reveal どちらにも落ちず沈黙する問題を解消。reload と reveal は文字でなく修飾(`cmd && shift` か否か)で振り分ける
+
+(M8 以降、完了時に追記)

@@ -2,9 +2,10 @@ import AppKit
 import HTMLViewerCore
 import SwiftUI
 
-/// 左サイドバー: 登録フォルダ管理 + RECENT リスト。
+/// 左サイドバー: 登録フォルダ管理 + 検索 + RECENT / TREE リスト。
 struct SidebarView: View {
     @Environment(AppState.self) private var app
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         @Bindable var app = app
@@ -42,23 +43,54 @@ struct SidebarView: View {
 
             Divider().overlay(Color.white.opacity(0.06)).padding(.vertical, 8)
 
-            // ── RECENT ──
-            Text("最近")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Theme.textFaint)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 4)
-
-            List(selection: $app.selectedFile) {
-                ForEach(app.recentFiles) { file in
-                    FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
-                        .tag(Optional(file))
-                        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
-                        .listRowBackground(Color.clear)
-                }
+            // ── 検索 ──
+            HStack(spacing: 7) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11)).foregroundStyle(Theme.textFaint)
+                TextField("検索(/)", text: $app.searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .focused($searchFocused)
+                    .onExitCommand { app.searchText = ""; searchFocused = false }  // Esc: クリア + リストへ
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 16).padding(.bottom, 8)
+            .onChange(of: searchFocused) { _, focused in app.isSearchFocused = focused }
+            .onChange(of: app.focusSearchRequest) { _, _ in searchFocused = true }  // `/` で要求
+
+            // ── タブ ──
+            Picker("", selection: $app.selectedTab) {
+                Text("最近").tag(AppState.SidebarTab.recent)
+                Text("ツリー").tag(AppState.SidebarTab.tree)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 12).padding(.bottom, 6)
+
+            // ── リスト(タブ別)──
+            if app.selectedTab == .recent {
+                List(selection: $app.selectedFile) {
+                    ForEach(app.recentFiles) { file in
+                        FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
+                            .tag(Optional(file))
+                            .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                            .listRowBackground(Color.clear)
+                    }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+            } else {
+                // dir 行(DisclosureGroup ラベル・tag 無し)クリックで List(selection:) が nil を
+                // 書き込み selectedFile を失う macOS 挙動を防ぐため、nil 書込を無視する Binding を使う
+                // (プログラム側の nil 化は AppState 直書きなので影響なし — M7 review #5)。
+                List(selection: Binding(
+                    get: { app.selectedFile },
+                    set: { if let v = $0 { app.selectedFile = v } }
+                )) {
+                    TreeRowsView(nodes: app.tree)
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+            }
 
             // ── フッタ ──
             Divider().overlay(Color.white.opacity(0.06))
@@ -75,7 +107,15 @@ struct SidebarView: View {
     }
 
     private var footerText: String {
-        var s = "\(app.recentFiles.count) ファイル"
+        // 総在庫は allFiles.count を表示する。検索フィルタ後の件数を出すと、ヒット 0 で「0 ファイル」と
+        // なりスキャン失敗/ファイル消失と誤解されるため、絞り込み中は「ヒット / 総数」表記にする(M7 review #9)。
+        let total = app.allFiles.count
+        var s: String
+        if app.searchText.isEmpty {
+            s = "\(total) ファイル"
+        } else {
+            s = "\(app.recentFiles.count) / \(total) ファイル(絞り込み中)"
+        }
         if app.scanTruncated { s += " (上限到達)" }
         return s
     }
@@ -154,5 +194,42 @@ struct SidebarView: View {
         if panel.runModal() == .OK, let url = panel.url {
             app.addFolder(url)
         }
+    }
+}
+
+/// TREE タブの再帰行。`DisclosureGroup(isExpanded:)` を `AppState.expandedDirs` にバインドし、
+/// 展開ポリシー(既定展開閾値・検索/選択の親 dir 自動展開・手動トグル)を UI に反映する(M7 brush-up)。
+/// `OutlineGroup` は展開状態を外部バインドできず常時全展開になるため、再帰 DisclosureGroup に置換した。
+private struct TreeRowsView: View {
+    @Environment(AppState.self) private var app
+    let nodes: [TreeNode]
+
+    var body: some View {
+        ForEach(nodes) { node in
+            if let file = node.file {
+                FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
+                    .tag(Optional(file))
+                    .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                    .listRowBackground(Color.clear)
+            } else {
+                DisclosureGroup(isExpanded: expansion(of: node.id)) {
+                    TreeRowsView(nodes: node.children ?? [])
+                } label: {
+                    Text(node.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.textDim)
+                }
+                .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                .listRowBackground(Color.clear)
+            }
+        }
+    }
+
+    /// `DisclosureGroup` の双方向バインディング(get=展開中か / set=ユーザートグル)。
+    private func expansion(of dirID: String) -> Binding<Bool> {
+        Binding(
+            get: { app.isExpanded(dirID) },
+            set: { app.setExpanded(dirID, $0) }
+        )
     }
 }
