@@ -33,7 +33,7 @@ Claude が生成する self-contained HTML を閲覧する macOS ネイティブ
 - GitHub 上で **closed** の issue は review / brush-up の有無に関わらず `closed issue`(終端)、**merged** の PR は `merged pr`(終端)
 - **issue を仕様の正**とし、PR 着手前に最新の issue を再読する(レビュー反映で仕様が更新されている場合があるため)
 - レビューは AI エージェントに**コメントとして残させ、修正は当てさせない**。指摘は作者が検証してから採否を決める(誇張は正確に評価し直す)。詳細: `.github/copilot-instructions.md`
-- **wrapper による status 自動進行**: `reviewing-untriaged-issues-for-loop`(issue 側)と `reviewing-pr-architecture-for-loop`(PR 側)は、レビュー対象を選別 → `starting review` に進めてからレビュー実行 → 判定で **`ready for implementation`(issue)/ `ready for merge`(PR)**(blocker なし)or `completed review`(blocker あり)に**自動進行**する。`doer ≠ judge` 原則を破る代わりに作者の手動 status 進行を省ける(誤判定時は作者が `waiting for review` に巻き戻して再レビューさせる)。review work(旧 brush-up)後の再レビューは作者が `completed review` → `starting review work` → `waiting for review` と進めるだけで次回 loop が拾う(`lastReviewedStatus` の手動リセットは不要)
+- **wrapper による status 自動進行**: `reviewing-untriaged-issues-for-loop`(issue 側、`reviewing-github-issues` skill)と `reviewing-untriaged-pr-for-loop`(PR 側、組み込み `/code-review` skill)は、レビュー対象を選別 → `starting review` に進めてからレビュー実行 → 判定で **`ready for implementation`(issue、has_blocker false)/ `ready for merge`(PR、findings 0 件)** or `completed review`(blocker / findings あり)に**自動進行**する。PR 側はマージ承認の可視化として GitHub の `merge ready` ラベルも同期付与/除去する(issue 側はラベルを使わない — 意図的な非対称)。`doer ≠ judge` 原則を破る代わりに作者の手動 status 進行を省ける(誤判定時は作者が `waiting for review` に巻き戻して再レビューさせる)。review work(旧 brush-up)後の再レビューは作者が `completed review` → `starting review work` → `waiting for review` と進めるだけで次回 loop が拾う(`lastReviewedStatus` の手動リセットは不要)
 
 ## セキュリティ(公開リポジトリ — 違反は即インシデント)
 
