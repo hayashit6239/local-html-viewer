@@ -79,7 +79,13 @@ struct SidebarView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
             } else {
-                List(selection: $app.selectedFile) {
+                // dir 行(DisclosureGroup ラベル・tag 無し)クリックで List(selection:) が nil を
+                // 書き込み selectedFile を失う macOS 挙動を防ぐため、nil 書込を無視する Binding を使う
+                // (プログラム側の nil 化は AppState 直書きなので影響なし — M7 review #5)。
+                List(selection: Binding(
+                    get: { app.selectedFile },
+                    set: { if let v = $0 { app.selectedFile = v } }
+                )) {
                     TreeRowsView(nodes: app.tree)
                 }
                 .listStyle(.plain)
@@ -101,7 +107,15 @@ struct SidebarView: View {
     }
 
     private var footerText: String {
-        var s = "\(app.recentFiles.count) ファイル"
+        // 総在庫は allFiles.count を表示する。検索フィルタ後の件数を出すと、ヒット 0 で「0 ファイル」と
+        // なりスキャン失敗/ファイル消失と誤解されるため、絞り込み中は「ヒット / 総数」表記にする(M7 review #9)。
+        let total = app.allFiles.count
+        var s: String
+        if app.searchText.isEmpty {
+            s = "\(total) ファイル"
+        } else {
+            s = "\(app.recentFiles.count) / \(total) ファイル(絞り込み中)"
+        }
         if app.scanTruncated { s += " (上限到達)" }
         return s
     }

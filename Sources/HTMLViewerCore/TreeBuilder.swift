@@ -24,9 +24,15 @@ public enum TreeBuilder {
 
     /// dir ノードの id は**末尾 `/` 付き**にして leaf(= `file.path`、末尾スラッシュ無し)と区別する。
     /// dir 名と同名の `.html` ファイルが同階層に並んでも id が衝突しない(SwiftUI Identifiable /
-    /// `expandedDirs` の誤照合を防ぐ — M7 review #8)。`ancestors`/`defaultExpanded`/`visibleLeaves`
+    /// `expandedDirs` の誤照合を防ぐ)。`ancestors`/`defaultExpanded`/`visibleLeaves`
     /// はすべて `TreeNode.id` を参照するため、この 1 箇所の付与で一貫する。
-    private static func dirID(_ path: String) -> String { path + "/" }
+    /// 既に末尾 `/`(root=`/` や trailing slash 付き rootPath)なら二重付与しない。
+    private static func dirID(_ path: String) -> String { path.hasSuffix("/") ? path : path + "/" }
+
+    /// dir パスを連結する。`parent` が既に末尾 `/`(root=`/` 等)なら二重スラッシュを混入させない。
+    private static func joinDir(_ parent: String, _ component: String) -> String {
+        parent.hasSuffix("/") ? parent + component : parent + "/" + component
+    }
 
     private static func level(
         parent: String,
@@ -44,7 +50,7 @@ public enum TreeBuilder {
             }
         }
         let dirs = groups.keys.sorted().map { dir -> TreeNode in
-            let dirPath = parent + "/" + dir
+            let dirPath = joinDir(parent, dir)
             return TreeNode(id: dirID(dirPath), name: dir, file: nil, children: level(parent: dirPath, entries: groups[dir]!))
         }
         return dirs + leaves.sorted { $0.name < $1.name }
@@ -60,7 +66,9 @@ public enum TreeBuilder {
     /// TREE に表示すべき展開集合を状態から合成する(UI 非依存・純関数)。
     /// 個別ポリシー(`defaultExpanded` / `ancestors`)をまとめ、UI 側の結線を薄く保つ:
     /// - 基底: `defaultExpanded`(dir 総数 ≤ 閾値で全展開・超過は第一階層のみ)
-    /// - 検索中: 全 leaf(= フィルタ後ヒット)の祖先も展開してヒットを可視化(クエリ消去で基底へ復帰)
+    /// - 検索中: `nodes` は既にフィルタ後ツリー(全 leaf がヒット)なので**全 dir を展開**して
+    ///   ヒットを可視化する(クエリ消去で基底へ復帰)。leaf ごとに `ancestors` を引く O(L×N) DFS は
+    ///   `allDirIDs` の O(N) と等価結果かつ高速なので後者を使う(M7 review #7)
     /// - 選択中 leaf があれば、その祖先も展開(閉じた dir 内の選択を親 dir 自動展開で可視化)
     public static func expansionSet(
         for nodes: [TreeNode],
@@ -69,9 +77,7 @@ public enum TreeBuilder {
     ) -> Set<String> {
         var set = defaultExpanded(nodes)
         if searching {
-            for leaf in allLeaves(nodes) {
-                set.formUnion(ancestors(ofLeaf: leaf.path, in: nodes))
-            }
+            set.formUnion(allDirIDs(nodes))
         }
         if let selectedLeafPath {
             set.formUnion(ancestors(ofLeaf: selectedLeafPath, in: nodes))
@@ -109,7 +115,8 @@ public enum TreeBuilder {
 
     // MARK: - helpers
 
-    private static func allDirIDs(_ nodes: [TreeNode]) -> Set<String> {
+    /// ツリー内の全 dir ノード id(`userCollapsedDirs` の prune 等で使う)。
+    public static func allDirIDs(_ nodes: [TreeNode]) -> Set<String> {
         var ids = Set<String>()
         for node in nodes where node.children != nil {
             ids.insert(node.id)

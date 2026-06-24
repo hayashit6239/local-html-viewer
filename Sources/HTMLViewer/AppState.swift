@@ -50,7 +50,12 @@ final class AppState {
     var searchText = "" {
         didSet {
             recomputeTreeExpansion()
-            selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+            // EXTERNAL ピンを選択中は検索で選択をすり替えない。ピンは検索リストに出ないため
+            // reconcile が visibleLeaves.first へ飛ばし、見ていた外部プレビューが無関係ファイルへ
+            // スワップするのを防ぐ(M7 review #3)。
+            if selectedFile?.isExternal != true {
+                selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+            }
             recomputeTreeExpansion()
         }
     }
@@ -122,12 +127,15 @@ final class AppState {
 
     /// j(down)/k(up)で選択を移動し即プレビュー。
     /// 選択が可視列に無い(TREE で折りたたみ/タブ切替により隠れた)ときは、全 leaf 順序を
-    /// 基準に同方向の最近可視 leaf へ移し、先頭ジャンプを防ぐ(M7 review #3/#4)。
+    /// 基準に同方向の最近可視 leaf へ移し、先頭ジャンプを防ぐ。
+    /// 可視列が空(全 dir 折りたたみ等)で nil が返る場合は現選択を維持し、プレビューを消さない(M7 review #1)。
     func moveSelection(_ direction: SelectionDirection) {
         let fullOrder: [HTMLFile] = selectedTab == .tree ? TreeBuilder.allLeaves(tree) : recentFiles
-        selectedFile = SelectionLogic.next(
+        if let next = SelectionLogic.next(
             after: selectedFile, in: visibleLeaves, fullOrder: fullOrder, direction: direction
-        )
+        ) {
+            selectedFile = next
+        }
     }
 
     /// 選択中ファイルを Finder で表示(未選択なら no-op)。
@@ -226,6 +234,12 @@ final class AppState {
             unreadableExternalPath = nil
         }
         if let inter = lastInternal {
+            // 検索中に odoc で開いたファイルが filter で隠れるならクエリをクリアして可視化する
+            // (preview には映るのにリスト・j/k から不可視になるのを防ぐ — M7 review #2)。
+            // searchText の didSet が走るが、直後に selectedFile を inter で上書きするので影響なし。
+            if !searchText.isEmpty, !filteredFiles.contains(where: { $0.path == inter.path }) {
+                searchText = ""
+            }
             selectedFile = inter
             unreadableExternalPath = nil
             recomputeTreeExpansion()  // odoc で選んだ内部ファイルの祖先 dir を TREE で可視化(M7 review #5)
@@ -374,6 +388,10 @@ final class AppState {
             if selectedFile == nil {
                 selectedFile = recentFiles.first
             }
+            // 削除/再走査で消えた dir id を userCollapsedDirs から除去する。蓄積メモリリークを防ぎ、
+            // 同パスのフォルダが後で再登録/再マウントされたとき「新規フォルダ」が前回の sticky 折りたたみ
+            // を引き継がず初期状態(既定展開)で出るようにする(M7 review #4)。
+            userCollapsedDirs.formIntersection(TreeBuilder.allDirIDs(tree))
             // 走査でツリー構造が変わったので展開を取り直す(既定ポリシー + 選択の親 dir 自動展開)。
             recomputeTreeExpansion()
             // 検索中に rename 等で選択が filter から外れたら可視列へ reconcile し、

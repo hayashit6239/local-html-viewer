@@ -87,6 +87,21 @@ struct TreeBuilderTests {
         #expect(dirNode?.id != leafNode?.id)         // 衝突しない
     }
 
+    @Test("trailing slash 付き root でも二重スラッシュを混入させない(M7 review #10)")
+    func rootTrailingSlashNoDoubleSlash() {
+        // rootPath が末尾 "/"(root='/' / URL.path 由来の trailing slash)のケース
+        let file = HTMLFile(
+            path: "/sub/a.html", name: "a.html", mtime: Date(timeIntervalSince1970: 0),
+            rootPath: "/", relativePath: "sub/a.html")
+        let tree = TreeBuilder.build([file])
+        #expect(tree[0].id == "/")           // dirID("/") は "//" にしない
+        let subDir = tree[0].children?.first { !$0.isLeaf }
+        #expect(subDir?.id == "/sub/")       // "//sub/" にならない
+        // ancestors も末尾正規化された dir id を返し、selectedLeafPath で展開できる
+        let anc = TreeBuilder.ancestors(ofLeaf: "/sub/a.html", in: tree)
+        #expect(anc == ["/", "/sub/"])
+    }
+
     @Test("展開合成: 非検索・未選択は defaultExpanded と一致")
     func expansionSetDefault() {
         let files = [f(root: "/R", rel: "sub/b.html"), f(root: "/R", rel: "c.html")]

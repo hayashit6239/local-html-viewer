@@ -29,7 +29,7 @@
 | M4 | WKWebView プレビュー + 起動時最新表示 + reveal + JS パネル | クリックでプレビュー / 起動直後に最新表示 / `alert()` fixture でダイアログ表示 | ✅ 2026-06-17(`NavigationPolicy` 5 テスト → 計 33 green、build/起動スモーク OK。レンダリング・JS ダイアログ・reveal は §5 手動チェックリストで担保) |
 | M5 | 外部オープン完成(EXTERNAL ピン留め。監視は M6 へ集約しスコープ外) | 外部 `.html` を `open -b` → 先頭に EXTERNAL ピン + プレビュー / 内部は通常選択(二重表示なし) | ✅ 2026-06-23(`ExternalOpenPolicy` 6 テスト → 計 51 green。バンドルで外部オープン・再受信・異常系クラッシュなしを確認。ピン+プレビューの目視は §5)|
 | M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 典型条件(~100KB・rescan 非伴)で 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | ✅ 2026-06-23(着手前スモークで FSEvents 実動実証 → `FileWatcher` 統合 + `WatchEventPolicy`/`Debounce` 単体で計 61 green。live reload / scroll の目視は §5)|
-| M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / 展開ポリシー UI 配線 / `swift test` 0 | ✅ 2026-06-24(`TreeBuilder`(`expansionSet` 含む)/`SearchProvider`/`SelectionLogic` 計 64 green、build/起動スモーク OK。セグメント・検索・DisclosureGroup 展開・キー操作の目視は §5)|
+| M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / 展開ポリシー UI 配線 / `swift test` 0 | ⚠️ 部分(Core ✅ / GUI 未実施)2026-06-24(`TreeBuilder`(`expansionSet`/`allDirIDs`)/`SearchProvider`/`SelectionLogic` 計 84 green、build/起動スモーク OK。**§5 手動チェックリスト 11 行はすべて ⬜**=キーモニタ透過条件〔WKWebView responder / NSPanel / option-control / Shift+/〕・DisclosureGroup 展開 UX は単体テスト不能のため**マージ前に作者の GUI 確認が必要**。03 §5 M7 / M7 review #8)|
 | M8 | hook + settings example | `scripts/test-hooks.sh` が 0 / 実セッションで Write → 自動表示 | — |
 | M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | — |
 

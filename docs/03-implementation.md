@@ -165,5 +165,17 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - #10: `keyEventShouldYieldToFocus` で key window が `NSPanel`(`NSOpenPanel` 等のモーダル補助ダイアログ)のときビューアキーを透過(ダイアログ背後で選択移動/reload が走るのを防ぐ。本アプリは単一 Window 設計)
   - **#7 は不採用(spec 準拠)**: 「検索中に選択がヒットから外れると reconcile が先頭(=条件次第で EXTERNAL ピン)を選びプレビューが変わる」件は、issue #18 状態保持規則①「消えたら先頭」の仕様どおりの挙動。ピンは検索クエリにマッチした時のみ可視化される(第2ラウンド #2)ため、可視先頭を選ぶのは整合的。仕様を曲げてまで非外部優先にはしない
   - テスト計 83(`TreeBuilder` dir/leaf id 衝突回避 +1)。sticky 折りたたみ・odoc 展開・NSPanel 透過は AppState/AppKit 層のため GUI 検証は作者に委ねる
+- **brush-up 第4ラウンド(2026-06-24・`/code-review high` 10 件 — 第3ラウンドの複雑化が生んだ派生 defect)**:
+  - #1: `moveSelection` は `SelectionLogic.next` が nil(全 dir 折りたたみ等で可視列が空)のとき**現選択を維持**し、プレビューを消さない(`selectedFile = nil` の代入をやめる)
+  - #7: `expansionSet(searching:)` を leaf ごとの `ancestors` O(L×N) DFS から **`allDirIDs` の O(N)** に置換(フィルタ後ツリーは全 leaf がヒットなので全 dir 展開と等価)。検索 1 文字あたりの main-thread ノード訪問を L×N → N に削減
+  - #5: TREE の `List(selection:)` を **nil 書込を無視する `Binding`** に。tag 無し dir 行(DisclosureGroup ラベル)クリックで `selectedFile` が nil 化しプレビューが消える macOS 挙動を防ぐ(プログラム側の nil 化は AppState 直書きなので無影響)
+  - #9: footer を `recentFiles.count`(検索フィルタ後)から **`allFiles.count`(総在庫)** 表示に。検索ヒット 0 で「0 ファイル」となりスキャン失敗/消失と誤解されるのを防ぎ、絞り込み中は「ヒット / 総数」表記
+  - #2: `handleOpenedURLs` で odoc が開いた内部ファイルが検索 filter で隠れる場合 **`searchText` をクリア**して可視化(preview に映るのにリスト・j/k から不可視になるのを解消)
+  - #4: `rescan` で `userCollapsedDirs` を現ツリーの dir id に `formIntersection` で prune。削除フォルダ id の蓄積リーク防止 + 同パス再登録時に「新規フォルダ」が前回の sticky 折りたたみを引き継がない
+  - #3: `searchText.didSet` の reconcile を、**EXTERNAL ピン選択中はスキップ**(ピンは検索リストに出ないため reconcile が先頭へ飛ばし外部プレビューがスワップするのを防ぐ)
+  - #10: `TreeBuilder` の dir パス結合を防御化(`joinDir`/`dirID` が trailing slash 付き root=`/` で `//` を作らない)。回帰テスト +1
+  - #8: `docs/04` M7 行を `✅` → **`⚠️ 部分(Core ✅ / GUI 未実施)`** に修正。§5 手動 11 行が全 ⬜ でマージ前に作者の GUI 確認が必要な実態を明示(CLAUDE.md 進捗管理規約に合わせる)
+  - **#6 は対応済みとして据え置き**: 「rescan fallback が折りたたみ祖先で alphabetic-first に化ける」件は、第3ラウンドで導入した `recomputeTreeExpansion` の「選択中 leaf の祖先は折りたたみより優先して可視に残す」ロジックにより、fallback 選択(mtime 最新)の祖先が展開され可視化されるため発生しない(reconcile も走らない)
+  - テスト計 84(trailing slash root の `//` 回避 +1)。selection nil 化防止・NSPanel/WKWebView 透過・DisclosureGroup 選択挙動は AppKit/SwiftUI 層のため**マージ前の GUI 検証が必須**(docs/04 §5 M7)
 
 (M8 以降、完了時に追記)
