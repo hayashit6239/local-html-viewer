@@ -27,16 +27,43 @@ final class AppState {
     // MARK: - M7: 検索 / タブ / キーボード
 
     public enum SidebarTab: Sendable { case recent, tree }
-    /// 表示タブ(RECENT / TREE)。
-    var selectedTab: SidebarTab = .recent
+    /// 表示タブ(RECENT / TREE)。TREE に切り替えたら選択を可視化する展開を取り直す。
+    var selectedTab: SidebarTab = .recent {
+        didSet { if selectedTab == .tree { recomputeTreeExpansion() } }
+    }
     /// 検索フィールドが first responder か(`@FocusState` のミラー。キーモニタの透過判定に使う)。
     var isSearchFocused = false
     /// `/` キーで検索フィールドへフォーカスを要求(インクリメントで発火。SidebarView が監視)。
     private(set) var focusSearchRequest = 0
     func requestSearchFocus() { focusSearchRequest &+= 1 }
-    /// インクリメンタル検索クエリ。変化のたびに選択を残存ヒットで維持・消えたら先頭へ。
+    /// インクリメンタル検索クエリ。変化のたびに展開を取り直し、選択を残存ヒットで維持・消えたら先頭へ。
+    /// 展開を先に更新するのは、reconcile の入力 `visibleLeaves` が `expandedDirs` に依存するため。
     var searchText = "" {
-        didSet { selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves) }
+        didSet {
+            recomputeTreeExpansion()
+            selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+        }
+    }
+
+    /// TREE タブで展開中の dir id 集合(`DisclosureGroup` の isExpanded バインディングの源)。
+    /// 既定展開ポリシー・検索ヒット/選択の親 dir 自動展開・ユーザー手動トグルを束ねる(issue #18 決定)。
+    private(set) var expandedDirs: Set<String> = []
+
+    /// 現在の状態(検索中か / 選択中 leaf)から TREE 展開集合を `TreeBuilder` で取り直す。
+    private func recomputeTreeExpansion() {
+        expandedDirs = TreeBuilder.expansionSet(
+            for: tree,
+            searching: !searchText.isEmpty,
+            selectedLeafPath: selectedFile?.path
+        )
+    }
+
+    /// dir が展開中か(`SidebarView` の `DisclosureGroup` バインディング用)。
+    func isExpanded(_ dirID: String) -> Bool { expandedDirs.contains(dirID) }
+
+    /// dir の展開/折りたたみをユーザー操作で切り替える。
+    func setExpanded(_ dirID: String, _ expanded: Bool) {
+        if expanded { expandedDirs.insert(dirID) } else { expandedDirs.remove(dirID) }
     }
 
     private let search: SearchProvider = FilenameSearchProvider()
@@ -51,16 +78,16 @@ final class AppState {
         RecentSorter.sortedByModificationDateDescending(filteredFiles)
     }
 
-    /// TREE タブ用: 検索適用後の階層(OutlineGroup は既定で全展開)。
+    /// TREE タブ用: 検索適用後の階層。
     var tree: [TreeNode] {
         TreeBuilder.build(filteredFiles)
     }
 
-    /// 現タブの可視 leaf 列(j/k の移動対象)。
+    /// 現タブの可視 leaf 列(j/k の移動対象)。TREE は展開中 dir 配下のみ(折りたたみ dir は飛ばす)。
     private var visibleLeaves: [HTMLFile] {
         switch selectedTab {
         case .recent: return recentFiles
-        case .tree: return TreeBuilder.allLeaves(tree)
+        case .tree: return TreeBuilder.visibleLeaves(tree, expanded: expandedDirs)
         }
     }
 
@@ -184,6 +211,8 @@ final class AppState {
             if selectedFile == nil {
                 selectedFile = recentFiles.first
             }
+            // 走査でツリー構造が変わったので展開を取り直す(既定ポリシー + 選択の親 dir 自動展開)。
+            recomputeTreeExpansion()
         }
     }
 }

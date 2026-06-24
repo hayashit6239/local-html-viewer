@@ -69,4 +69,32 @@ struct TreeBuilderTests {
         let tree = TreeBuilder.build(files)
         #expect(TreeBuilder.defaultExpanded(tree) == ["/R", "/R/sub"])
     }
+
+    @Test("展開合成: 非検索・未選択は defaultExpanded と一致")
+    func expansionSetDefault() {
+        let files = [f(root: "/R", rel: "sub/b.html"), f(root: "/R", rel: "c.html")]
+        let tree = TreeBuilder.build(files)
+        let set = TreeBuilder.expansionSet(for: tree, searching: false, selectedLeafPath: nil)
+        #expect(set == TreeBuilder.defaultExpanded(tree))
+    }
+
+    @Test("展開合成: 選択中 leaf の祖先 dir を展開(親 dir 自動展開)")
+    func expansionSetSelectedAncestors() {
+        // 閾値超過を模さず、選択祖先が必ず含まれることを確認(deep leaf)
+        let files = [f(root: "/R", rel: "x/y/z.html")]
+        let tree = TreeBuilder.build(files)
+        let set = TreeBuilder.expansionSet(
+            for: tree, searching: false, selectedLeafPath: "/R/x/y/z.html"
+        )
+        #expect(set.isSuperset(of: ["/R", "/R/x", "/R/x/y"]))
+    }
+
+    @Test("展開合成: 検索中は全ヒットの祖先を展開して可視化")
+    func expansionSetSearchingExpandsHits() {
+        let files = [f(root: "/R", rel: "deep/nested/hit.html")]
+        let tree = TreeBuilder.build(files)
+        // 検索中フラグで、ヒット(= フィルタ後 leaf)の祖先がすべて展開される
+        let set = TreeBuilder.expansionSet(for: tree, searching: true, selectedLeafPath: nil)
+        #expect(set.isSuperset(of: ["/R", "/R/deep", "/R/deep/nested"]))
+    }
 }

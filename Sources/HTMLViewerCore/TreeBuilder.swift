@@ -51,6 +51,28 @@ public enum TreeBuilder {
         return Set(nodes.map(\.id))
     }
 
+    /// TREE に表示すべき展開集合を状態から合成する(UI 非依存・純関数)。
+    /// 個別ポリシー(`defaultExpanded` / `ancestors`)をまとめ、UI 側の結線を薄く保つ:
+    /// - 基底: `defaultExpanded`(dir 総数 ≤ 閾値で全展開・超過は第一階層のみ)
+    /// - 検索中: 全 leaf(= フィルタ後ヒット)の祖先も展開してヒットを可視化(クエリ消去で基底へ復帰)
+    /// - 選択中 leaf があれば、その祖先も展開(閉じた dir 内の選択を親 dir 自動展開で可視化)
+    public static func expansionSet(
+        for nodes: [TreeNode],
+        searching: Bool,
+        selectedLeafPath: String?
+    ) -> Set<String> {
+        var set = defaultExpanded(nodes)
+        if searching {
+            for leaf in allLeaves(nodes) {
+                set.formUnion(ancestors(ofLeaf: leaf.path, in: nodes))
+            }
+        }
+        if let selectedLeafPath {
+            set.formUnion(ancestors(ofLeaf: selectedLeafPath, in: nodes))
+        }
+        return set
+    }
+
     /// leaf を可視化するために展開すべき祖先 dir の id 集合(ルートまで再帰)。
     public static func ancestors(ofLeaf leafPath: String, in nodes: [TreeNode]) -> Set<String> {
         var result = Set<String>()

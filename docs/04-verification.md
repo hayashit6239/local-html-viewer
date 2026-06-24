@@ -29,7 +29,7 @@
 | M4 | WKWebView プレビュー + 起動時最新表示 + reveal + JS パネル | クリックでプレビュー / 起動直後に最新表示 / `alert()` fixture でダイアログ表示 | ✅ 2026-06-17(`NavigationPolicy` 5 テスト → 計 33 green、build/起動スモーク OK。レンダリング・JS ダイアログ・reveal は §5 手動チェックリストで担保) |
 | M5 | 外部オープン完成(EXTERNAL ピン留め・一時監視) | M2.5 + 表示まで一気通貫 / Dock アイコン D&D でも開く | — |
 | M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | — |
-| M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / `swift test` 0 | ✅ 2026-06-23(`TreeBuilder`/`SearchProvider`/`SelectionLogic` 計 61 green、build/起動スモーク OK。セグメント・検索・OutlineGroup・キー操作の目視は §5)|
+| M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / 展開ポリシー UI 配線 / `swift test` 0 | ✅ 2026-06-24(`TreeBuilder`(`expansionSet` 含む)/`SearchProvider`/`SelectionLogic` 計 64 green、build/起動スモーク OK。セグメント・検索・DisclosureGroup 展開・キー操作の目視は §5)|
 | M8 | hook + settings example | `scripts/test-hooks.sh` が 0 / 実セッションで Write → 自動表示 | — |
 | M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | — |
 
@@ -83,6 +83,9 @@
 | 5 | j/k 移動 | リストで j/k | 選択が上下移動し即プレビュー(端クランプ) | ⬜(GUI 目視) |
 | 6 | 検索中の透過 | 検索フォーカス中に j/k/r | テキスト入力として扱う(ビューア操作にならない) | ⬜(GUI 目視) |
 | 7 | r / ⌘⇧R | リストで `r` / `⌘⇧R` | 再読込 / Finder 表示(未選択なら no-op) | ⬜(GUI 目視) |
-| 8 | TREE 展開 | ツリータブで dir | OutlineGroup で階層展開・leaf 選択で即プレビュー | ⬜(GUI 目視) |
+| 8 | TREE 展開 | ツリータブで dir | DisclosureGroup で階層展開/折りたたみ・leaf 選択で即プレビュー | ⬜(GUI 目視) |
+| 9 | 既定展開ポリシー | dir 総数 ≤ 40 / > 40 のフォルダで TREE 起動 | ≤40 は全展開・>40 は第一階層のみ展開 | ⬜(GUI 目視) |
+| 10 | 親 dir 自動展開 | 折りたたみ dir 内の leaf を検索/選択で指す | 親 dir が自動展開され選択が可視化 | ⬜(GUI 目視) |
+| 11 | 折りたたみ中の j/k | dir を折りたたんで j/k 移動 | 折りたたみ dir 配下の leaf は飛ばす(可視 leaf のみ移動) | ⬜(GUI 目視) |
 
-> 注: Core(`TreeBuilder`/`SearchProvider`/`SelectionLogic`)は `make test` で閉じる。キーモニタ・@FocusState・OutlineGroup の体感は GUI 手動。>40 件の第一階層のみ展開は M9 ポリッシュ(M7 は OutlineGroup 全展開)。
+> 注: Core(`TreeBuilder`/`SearchProvider`/`SelectionLogic`、展開合成 `expansionSet` 含む)は `make test` で閉じる。キーモニタ・@FocusState・DisclosureGroup 展開 UX の体感は GUI 手動。展開ポリシー(>40 第一階層のみ / 親 dir 自動展開 / 検索ヒット展開)は M7 brush-up(2026-06-24)で UI 配線済み(Core `expansionSet` + 再帰 `DisclosureGroup`)。

@@ -80,18 +80,7 @@ struct SidebarView: View {
                 .scrollContentBackground(.hidden)
             } else {
                 List(selection: $app.selectedFile) {
-                    OutlineGroup(app.tree, children: \.children) { node in
-                        if let file = node.file {
-                            FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
-                                .tag(Optional(file))
-                        } else {
-                            Text(node.name)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(Theme.textDim)
-                        }
-                    }
-                    .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
-                    .listRowBackground(Color.clear)
+                    TreeRowsView(nodes: app.tree)
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
@@ -191,5 +180,42 @@ struct SidebarView: View {
         if panel.runModal() == .OK, let url = panel.url {
             app.addFolder(url)
         }
+    }
+}
+
+/// TREE タブの再帰行。`DisclosureGroup(isExpanded:)` を `AppState.expandedDirs` にバインドし、
+/// 展開ポリシー(既定展開閾値・検索/選択の親 dir 自動展開・手動トグル)を UI に反映する(M7 brush-up)。
+/// `OutlineGroup` は展開状態を外部バインドできず常時全展開になるため、再帰 DisclosureGroup に置換した。
+private struct TreeRowsView: View {
+    @Environment(AppState.self) private var app
+    let nodes: [TreeNode]
+
+    var body: some View {
+        ForEach(nodes) { node in
+            if let file = node.file {
+                FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
+                    .tag(Optional(file))
+                    .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                    .listRowBackground(Color.clear)
+            } else {
+                DisclosureGroup(isExpanded: expansion(of: node.id)) {
+                    TreeRowsView(nodes: node.children ?? [])
+                } label: {
+                    Text(node.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.textDim)
+                }
+                .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                .listRowBackground(Color.clear)
+            }
+        }
+    }
+
+    /// `DisclosureGroup` の双方向バインディング(get=展開中か / set=ユーザートグル)。
+    private func expansion(of dirID: String) -> Binding<Bool> {
+        Binding(
+            get: { app.isExpanded(dirID) },
+            set: { app.setExpanded(dirID, $0) }
+        )
     }
 }

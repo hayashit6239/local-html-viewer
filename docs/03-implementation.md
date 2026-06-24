@@ -114,9 +114,15 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
 
 ### M7(2026-06-23)
 - Core(TDD): `TreeBuilder`(階層構築・`allLeaves`/`visibleLeaves`/`defaultExpanded`/`ancestors`、ID は絶対 path)/ `SearchProvider`(`FilenameSearchProvider`: NFC 正規化後 case-insensitive 部分一致、D8 再設計前提)/ `SelectionLogic`(`next` クランプ移動 + `reconcile` フィルタ後保持、照合は id)/ `TreeNode` モデル。テスト計 61
-- UI(Humble): `SidebarView` に検索フィールド(`@FocusState`、`/` フォーカス要求 → `onChange`、Esc は `onExitCommand` でクリア+blur)+ RECENT/TREE セグメント + TREE は `OutlineGroup(children:)`。`AppState` に `searchText`(didSet で `reconcile`)/ `selectedTab` / `filteredFiles` / `tree` / `visibleLeaves` / `moveSelection`
+- UI(Humble): `SidebarView` に検索フィールド(`@FocusState`、`/` フォーカス要求 → `onChange`、Esc は `onExitCommand` でクリア+blur)+ RECENT/TREE セグメント。`AppState` に `searchText`(didSet で展開取り直し + `reconcile`)/ `selectedTab` / `filteredFiles` / `tree` / `visibleLeaves` / `moveSelection`
 - キーボード: `HTMLViewerApp` の **Scene 直下に local key monitor を 1 個**(`onAppear` 設置・`onDisappear` 解除)。`j/k`=`moveSelection`、`r`=`reloadPreview`(未選択 no-op)、`⌘⇧R`=`revealSelectedInFinder`、`/`=検索フォーカス要求。**`isSearchFocused`(@FocusState ミラー)中は j/k/r を透過**
-- **簡略化(申し送り)**: TREE は `OutlineGroup` の既定全展開で描画し、j/k は `allLeaves` を対象。`defaultExpanded`(>40 件で第一階層のみ)/ `ancestors`(祖先展開)は Core 実装・テスト済みだが UI 採用は M9 ポリッシュへ送る(M7 は全展開で機能要件を満たす)
 - スコープ外: 全文検索=D8(本 PR はファイル名のみ)。タブ選択の永続化は未実装
+- **brush-up(2026-06-24)**: PR #26 `/code-review` 指摘を反映
+  - 🟡-1: 展開ポリシーを **UI 配線して issue #18 決定を充足**(初回レビューで「Core 実装済みだが UI 未採用」と指摘されていた簡略化を撤回)。`TreeBuilder.expansionSet(for:searching:selectedLeafPath:)` を Core に追加(`defaultExpanded` + 検索ヒット祖先 + 選択 leaf 祖先を合成・純関数・テスト 3 本追加)。`AppState` に `expandedDirs: Set<String>` + `recomputeTreeExpansion()`(searchText/selectedTab/rescan で取り直し)+ `isExpanded`/`setExpanded`。`SidebarView` の `OutlineGroup`(常時全展開・外部バインド不可)を **再帰 `DisclosureGroup(isExpanded:)`**(`TreeRowsView`)に置換し、`expandedDirs` にバインド。`visibleLeaves`(j/k 対象)も `allLeaves` → `visibleLeaves(tree, expanded:)` に切替えて折りたたみ dir を飛ばす
+  - 🟢-2: key monitor の `case "r"` を `where !cmd && !shift` に明示限定 + コメントで Shift+R="R" の分岐を説明(可読性)
+  - 🟢-1(visibleLeaves 二重計算)/ 🟢-3(`FileWatcher.events` single consumer・M7 では未使用)は M9/後続送りで据え置き
+  - テスト計 64(`TreeBuilder.expansionSet` +3)。展開 UX の目視確認は作者の GUI 検証に委ねる(再帰 DisclosureGroup の展開/折りたたみ挙動はユニットテスト対象外)
+
+(M8 以降、完了時に追記)
 
 (M8 以降、完了時に追記)

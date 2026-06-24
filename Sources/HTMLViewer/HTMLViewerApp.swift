@@ -37,10 +37,13 @@ private func installKeyMonitor(_ app: AppState) -> Any? {
         let chars = event.charactersIgnoringModifiers ?? ""
         let cmd = event.modifierFlags.contains(.command)
         let shift = event.modifierFlags.contains(.shift)
+        // Shift+R は charactersIgnoringModifiers が "R" を返すため "r" ケースには落ちず、
+        // ⌘⇧R(reveal)と別ハンドルされる。"r"(reload)は無修飾のみに明示限定して
+        // 修飾の有無を対称に書き、読み手の予測誤りを防ぐ(M7 brush-up 🟢-2)。
         switch chars {
         case "j": app.moveSelection(.down); return nil
         case "k": app.moveSelection(.up); return nil
-        case "r" where !cmd: app.reloadPreview(); return nil
+        case "r" where !cmd && !shift: app.reloadPreview(); return nil
         case "R" where cmd && shift: app.revealSelectedInFinder(); return nil
         case "/": app.requestSearchFocus(); return nil
         default: return event
