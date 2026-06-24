@@ -391,12 +391,17 @@ final class AppState {
             // 削除/再走査で消えた dir id を userCollapsedDirs から除去する。蓄積メモリリークを防ぎ、
             // 同パスのフォルダが後で再登録/再マウントされたとき「新規フォルダ」が前回の sticky 折りたたみ
             // を引き継がず初期状態(既定展開)で出るようにする(M7 review #4)。
-            userCollapsedDirs.formIntersection(TreeBuilder.allDirIDs(tree))
+            // **全ファイル(result.files)由来のツリー**で intersection する。検索フィルタ後の `tree` で
+            // 行うと、検索中に rescan が走ったとき一時的に隠れている dir が evict され、検索クリア後に
+            // 折りたたみ意図が失われる(round-5 #1)。
+            userCollapsedDirs.formIntersection(TreeBuilder.allDirIDs(TreeBuilder.build(result.files)))
             // 走査でツリー構造が変わったので展開を取り直す(既定ポリシー + 選択の親 dir 自動展開)。
             recomputeTreeExpansion()
             // 検索中に rename 等で選択が filter から外れたら可視列へ reconcile し、
             // 「ファイルは存在するが検索結果に不可視」状態を解消する(M7 review #6)。
-            if !searchText.isEmpty, let sel = selectedFile,
+            // ただし EXTERNAL ピンは TREE の visibleLeaves に出ないため、reconcile で内部ファイルに
+            // すり替わり外部プレビューが消えるのを防ぐ(searchText.didSet と同じガード — round-5 #2)。
+            if !searchText.isEmpty, let sel = selectedFile, !sel.isExternal,
                 !visibleLeaves.contains(where: { $0.id == sel.id }) {
                 selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
                 recomputeTreeExpansion()

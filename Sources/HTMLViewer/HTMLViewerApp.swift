@@ -40,21 +40,19 @@ private func installKeyMonitor(_ app: AppState) -> Any? {
         // あるときはキーを横取りせず透過する。`isSearchFocused` だけでは WKWebView 内の
         // フォーム要素を取りこぼすため、firstResponder チェーンも見る(M7 review #1)。
         if app.isSearchFocused || keyEventShouldYieldToFocus() { return event }
-        let chars = event.charactersIgnoringModifiers ?? ""
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let cmd = flags.contains(.command)
         let shift = flags.contains(.shift)
-        // option / control が乗ったキー(⌥r='®' / ⌃r 等)は横取りしない(M7 review #5)。
-        // Shift+R は charactersIgnoringModifiers が "R" を返すため "r" ケースには落ちず、
-        // ⌘⇧R(reveal)と別ハンドルされる。
-        let optOrCtrl = flags.contains(.option) || flags.contains(.control)
-        switch chars {
+        let optOrCtrl = flags.contains(.option) || flags.contains(.control)  // ⌥r='®' / ⌃r 等は横取りしない
+        // Caps Lock 有効時 charactersIgnoringModifiers は 'r' を 'R' に変えるため、小文字へ正規化して
+        // から判定する。reload と reveal は文字でなく修飾(cmd&&shift か否か)で振り分ける(M7 review #3)。
+        // Shift+/ は '?' を返し "/" に一致しないため横取りされない('r' と対称)。
+        let key = (event.charactersIgnoringModifiers ?? "").lowercased()
+        switch key {
         case "j" where !cmd && !optOrCtrl: app.moveSelection(.down); return nil
         case "k" where !cmd && !optOrCtrl: app.moveSelection(.up); return nil
         case "r" where !cmd && !shift && !optOrCtrl: app.reloadPreview(); return nil
-        // ⌘⇧R も option/control は弾く(⌘⇧⌥R 等の別アプリ bind と衝突しない — M7 review #9)。
-        case "R" where cmd && shift && !optOrCtrl: app.revealSelectedInFinder(); return nil
-        // Shift+/ は '?' を出すため横取りしない('r' と対称に shift も弾く — M7 review #2)。
+        case "r" where cmd && shift && !optOrCtrl: app.revealSelectedInFinder(); return nil  // ⌘⇧R
         case "/" where !cmd && !shift && !optOrCtrl: app.requestSearchFocus(); return nil
         default: return event
         }

@@ -177,5 +177,9 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - #8: `docs/04` M7 行を `✅` → **`⚠️ 部分(Core ✅ / GUI 未実施)`** に修正。§5 手動 11 行が全 ⬜ でマージ前に作者の GUI 確認が必要な実態を明示(CLAUDE.md 進捗管理規約に合わせる)
   - **#6 は対応済みとして据え置き**: 「rescan fallback が折りたたみ祖先で alphabetic-first に化ける」件は、第3ラウンドで導入した `recomputeTreeExpansion` の「選択中 leaf の祖先は折りたたみより優先して可視に残す」ロジックにより、fallback 選択(mtime 最新)の祖先が展開され可視化されるため発生しない(reconcile も走らない)
   - テスト計 84(trailing slash root の `//` 回避 +1)。selection nil 化防止・NSPanel/WKWebView 透過・DisclosureGroup 選択挙動は AppKit/SwiftUI 層のため**マージ前の GUI 検証が必須**(docs/04 §5 M7)
+- **brush-up 第5ラウンド(2026-06-24・`/code-review high` 3 件 — 第4ラウンドの派生 + Caps Lock エッジ)**: すべて採用
+  - #1: `rescan` の `userCollapsedDirs.formIntersection` を、検索フィルタ後の `tree` ではなく **全ファイル(`result.files`)由来のツリー**で行う。検索中に rescan が走ったとき一時的に隠れている dir が evict され、検索クリア後に折りたたみ意図が失われる回帰を解消
+  - #2: `rescan` の reconcile(round-4 #6)に **`!sel.isExternal` ガード**を追加(`searchText.didSet` と対称)。TREE で rescan 時に EXTERNAL ピンが内部ファイルへすり替わり外部プレビューが消えるのを防ぐ
+  - #3: key monitor で `charactersIgnoringModifiers` を **小文字に正規化**してから判定。Caps Lock 有効時に 'r' が 'R' になり reload/reveal どちらにも落ちず沈黙する問題を解消。reload と reveal は文字でなく修飾(`cmd && shift` か否か)で振り分ける
 
 (M8 以降、完了時に追記)
