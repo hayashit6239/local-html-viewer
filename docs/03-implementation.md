@@ -160,5 +160,11 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - #1: `Theme.Radius.button=6` に「design-mock-b 想定値・call site 不在のため未検証」を明示(badge の値整合ルールと一貫)
   - #7: `Theme.swift` / `AppIcon.svg` のコメントから `— M9 review #N` の process trail を剥離(実体ある rationale は残す。art asset は review より長生きするため)
   - `make icon` で再生成 .icns はバイト同一(cp ベース化でも内容不変)/ build/test/check 維持
+- **brush-up 第4ラウンド(2026-06-24・`/code-review high` 5 件)**: すべて採用
+  - #1: `build.sh` の icns コピーが `plutil ... || true` + `if [ -n ]` で **silent skip に退行**していたのを fail-loud に戻す。`CFBundleIconFile` 抽出失敗/空(plist 破損)は `exit 1`(generic アイコンで build 成功してしまうのを防ぐ)
+  - #3: `ICON_NAME="${ICON_NAME%.icns}"` で末尾 `.icns` を strip。`CFBundleIconFile=AppIcon.icns`(拡張子付きも legal)に変えても `AppIcon.icns.icns` 衝突で誤 abort しない
+  - #2: `build.sh` で **SVG が .icns より新しければ警告**(`-nt`)。`make install` 単独で旧 .icns が bundle される SVG-newer ドリフトに気付かせる(fail はしない。fresh clone は mtime 同値で false-warn しない)
+  - #4: `build-icon.sh` の BASE 検証を **pixelHeight も**に拡張。非正方 viewBox の SVG で width=1024 / height≠1024 の letterbox アイコンが iconutil を通るのを防ぐ
+  - #5: visual asset 変更時の **`CFBundleVersion` +1 ポリシーを明文化**(`build-icon.sh` 末尾のリマインダ + 本節)。自動 bump は no-op 再生成でも version を膨らませるため採らず、リマインダに留める。LS icon cache(bundle id + version)無効化のため**アイコン/SVG を変えたら CFBundleVersion を +1 する**(docs/04 §5 M9 #3 の killall フォールバックと併用)
 
 (M10 以降、完了時に追記)

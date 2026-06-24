@@ -24,8 +24,12 @@ BASE="$WORK/AppIcon.svg.png"
 # BASE が 1024px であることを検証する。qlmanage は SVG renderer 不在 / 古い macOS で非 1024 を
 # 返すことがあり、その場合 sips が silent upscale して blurry な @2x のまま .icns 化される。
 # fail-loud にして品質劣化を防ぐ。
+# width だけでなく height も検証する。qlmanage -s は max-dim で aspect 保持のため、非正方
+# viewBox の SVG だと width=1024 / height≠1024 の PNG が guard を通り、後段 sips -z で
+# letterbox(透明帯)入りアイコンになる。正方を要求する。
 base_w="$(sips -g pixelWidth "$BASE" 2>/dev/null | awk '/pixelWidth/{print $2}')"
-[ "$base_w" = "1024" ] || { echo "qlmanage 出力が 1024px ではありません(got: ${base_w:-?})。SVG renderer を確認してください"; exit 1; }
+base_h="$(sips -g pixelHeight "$BASE" 2>/dev/null | awk '/pixelHeight/{print $2}')"
+{ [ "$base_w" = "1024" ] && [ "$base_h" = "1024" ]; } || { echo "qlmanage 出力が 1024×1024 ではありません(got: ${base_w:-?}×${base_h:-?})。SVG の viewBox(正方)/ renderer を確認してください"; exit 1; }
 
 # 2) iconset レイアウト。`@2x` は次サイズの `1x` とピクセル同一(例 16x16@2x = 32 = 32x32)。
 # その invariant を sips の二重生成ではなく cp で構造化する(片方だけ差し替える誘惑を断つ)。
@@ -50,3 +54,7 @@ cp "$BASE"                     "$ICONSET/icon_512x512@2x.png"  # 1024(BASE は 1
 rm -f "$ICNS"
 iconutil -c icns "$ICONSET" -o "$ICNS"
 echo "built: $ICNS"
+# visual asset を変えたら Launch Services の icon cache(bundle id + version でキャッシュ)を
+# 無効化するため CFBundleVersion を +1 する運用(自動 bump は no-op 再生成でも version を
+# 膨らませるため、リマインダに留める。docs/03 §M9 / docs/04 §5 M9 #3)。
+echo "NOTE: アイコンを変更した場合は Info.plist の CFBundleVersion を +1 してください(LS icon cache 無効化)"

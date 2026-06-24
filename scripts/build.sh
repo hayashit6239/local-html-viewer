@@ -40,14 +40,23 @@ plutil -lint "$APP/Contents/Info.plist"
 # 参照する以上、.icns 欠落は Dock/Finder で generic アイコンに化けるだけで CI/build に検知
 # シグナルが出ないため、fail-loud にする。再生成は `make icon`(scripts/build-icon.sh)。
 ICON_NAME="$(plutil -extract CFBundleIconFile raw Support/Info.plist 2>/dev/null || true)"
-if [ -n "$ICON_NAME" ]; then
-	ICON_SRC="Support/icon/$ICON_NAME.icns"
-	if [ -f "$ICON_SRC" ]; then
-		cp "$ICON_SRC" "$APP/Contents/Resources/$ICON_NAME.icns"
-	else
-		echo "ERROR: $ICON_SRC が見つかりません(Info.plist の CFBundleIconFile=$ICON_NAME と不一致)。'make icon' で生成してください" >&2
-		exit 1
-	fi
+ICON_NAME="${ICON_NAME%.icns}"  # 値が拡張子付き(legal な "AppIcon.icns")でも二重 .icns にしない
+# plist は CFBundleIconFile を必ず持つ前提。抽出失敗/空は plist 破損なので fail-loud にする
+# (`if [ -n ]` での silent skip に退行させない)。
+if [ -z "$ICON_NAME" ]; then
+	echo "ERROR: Info.plist に CFBundleIconFile がありません(plutil -extract 失敗)" >&2
+	exit 1
+fi
+ICON_SRC="Support/icon/$ICON_NAME.icns"
+# SVG が .icns より新しいと再生成忘れ(SVG-newer ドリフト)。fail はせず警告で気付かせる。
+if [ -f "Support/icon/$ICON_NAME.svg" ] && [ "Support/icon/$ICON_NAME.svg" -nt "$ICON_SRC" ]; then
+	echo "WARN: $ICON_NAME.svg が .icns より新しい。'make icon' で再生成し忘れていませんか?" >&2
+fi
+if [ -f "$ICON_SRC" ]; then
+	cp "$ICON_SRC" "$APP/Contents/Resources/$ICON_NAME.icns"
+else
+	echo "ERROR: $ICON_SRC が見つかりません(Info.plist の CFBundleIconFile=$ICON_NAME と不一致)。'make icon' で生成してください" >&2
+	exit 1
 fi
 
 echo "==> codesign (ad-hoc)"
