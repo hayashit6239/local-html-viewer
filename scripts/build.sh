@@ -35,6 +35,11 @@ cp Support/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 plutil -lint "$APP/Contents/Info.plist"
 
+# .icns コピー(M9: Info.plist の CFBundleIconFile=AppIcon と対応)
+if [ -f Support/icon/AppIcon.icns ]; then
+	cp Support/icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+fi
+
 echo "==> codesign (ad-hoc)"
 codesign --force --sign - "$APP"
 

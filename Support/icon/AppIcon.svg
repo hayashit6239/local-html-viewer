@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- 案 B「アンバー × charcoal」のアプリアイコン: HTML ブラケットモノグラム。
+       実画像/個人意匠は持ち込まず、SVG ベクタで合成(security.md 規約 3 準拠)。 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1F1B17"/>
+      <stop offset="1" stop-color="#0F0D0A"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFB544"/>
+      <stop offset="1" stop-color="#D97A1F"/>
+    </linearGradient>
+  </defs>
+  <!-- 角丸の背景(macOS Big Sur 以降の squircle に近い丸み・200px) -->
+  <rect x="0" y="0" width="1024" height="1024" rx="200" ry="200" fill="url(#bg)"/>
+  <!-- 微妙なハイライト -->
+  <rect x="0" y="0" width="1024" height="60" rx="200" ry="200" fill="#FFFFFF" opacity="0.05"/>
+  <!-- < / > ブラケット + 中央のドット(=ファイル) -->
+  <g stroke="url(#amber)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <polyline points="368,360 220,512 368,664"/>
+    <polyline points="656,360 804,512 656,664"/>
+  </g>
+  <!-- 中央の amber ドット(html 成果物の象徴) -->
+  <circle cx="512" cy="512" r="48" fill="url(#amber)"/>
+  <!-- 下部に細いアンダーライン(モノスペース・ターミナル感の踏襲) -->
+  <rect x="220" y="780" width="584" height="14" rx="7" fill="url(#amber)" opacity="0.45"/>
+</svg>

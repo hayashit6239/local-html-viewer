@@ -138,4 +138,11 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - 🟡-2: **debounce の Core 純化(clock 注入式)は M9 ポリッシュ判断送り**で恒久化を明示(レビュー提案 (B))。Core 側は `Debounce.coalesce`(events 列 → fired 列の純関数)で意味論回帰を固定 + AppState は Task cancel + `Task.sleep` でランタイム実装、という二層構造を意図的に受け入れる。actor/clock 駆動への昇格は M9 で他のポリッシュとまとめて判断する
   - 🟡-1(典型条件 ~100KB の実測 1 行記録)は GUI 操作が必要なため、本 brush-up では **未充足のまま残置**。作者が手動 stopwatch で 100KB / 500KB / 1MB の再描画時間を計測 → `docs/04` M6 §5 注に追記して closure する(マージブロッカーではないがフォローアップ TODO)
 
-(M7 以降、完了時に追記)
+### M9(2026-06-24)
+- **.icns**: `Support/icon/AppIcon.svg`(案 B モノグラム = HTML ブラケット + amber ドット、合成ベクタ・個人意匠なし)→ `scripts/build-icon.sh` で `qlmanage` → `sips` 派生 → `iconutil -c icns` → `Support/icon/AppIcon.icns` を生成。`scripts/build.sh` が Resources にコピー、`Info.plist` に `CFBundleIconFile=AppIcon`
+- **Theme.swift**: `Spacing` / `Radius` 定数を追加(画面間の余白・角丸の一貫性)。既存の色 swatch はそのまま
+- **README.md**(新規): セットアップ・hook 連携・キー操作・既知の制約・開発コマンド・docs リンク・MIT
+- スコープ縮小(率直): 本ブランチは main 由来のため M5/M6/M7 の UI は持たず、**M7 申し送りの「TREE 展開ポリシー UI 採用」は M9 では扱わない**(M7 PR #26 のフォローアップに送る。docs/04 §5 M9 に申し送り記載)。M9 が触る UI は Theme 定数のみで、サイドバー/プレビューのモック比較ポリッシュは M5/M6/M7 マージ後の別アクションが妥当
+- スコープ外: 配布パッケージ・公証(D2)、メニューバー常駐(`LSUIElement` は引き続き設定しない)
+
+(M10 以降、完了時に追記)

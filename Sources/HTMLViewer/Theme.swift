@@ -1,13 +1,28 @@
 import SwiftUI
 
-/// 案 B「アンバー × macOS ネイティブ・ハイブリッド」のパレット(docs/assets/design-mock-b.html)
+/// 案 B「アンバー × macOS ネイティブ・ハイブリッド」のパレット + spacing/radius 定数。
+/// リファレンス: `docs/assets/design-mock-b.html`。
 enum Theme {
+    // 色(swatch)
     static let background = Color(hex: 0x1D1B20)
     static let amber = Color(hex: 0xE8A13C)
     static let text = Color(hex: 0xE6E2D8)
     static let textDim = Color(hex: 0x98948B)
     static let textFaint = Color(hex: 0x5D5A54)
     static let live = Color(hex: 0x8FCE5A)
+
+    // 間隔・角丸(M9: 1 箇所に集約して画面間の一貫性を担保)
+    enum Spacing {
+        static let xs: CGFloat = 4
+        static let sm: CGFloat = 8
+        static let md: CGFloat = 12
+        static let lg: CGFloat = 16
+    }
+
+    enum Radius {
+        static let badge: CGFloat = 4
+        static let button: CGFloat = 6
+    }
 }
 
 extension Color {

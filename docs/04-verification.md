@@ -31,7 +31,7 @@
 | M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 典型条件(~100KB・rescan 非伴)で 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | ✅ 2026-06-23(着手前スモークで FSEvents 実動実証 → `FileWatcher` 統合 + `WatchEventPolicy`/`Debounce` 単体で計 61 green。live reload / scroll の目視は §5)|
 | M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / `swift test` 0 | — |
 | M8 | hook + settings example | `scripts/test-hooks.sh` が 0 / 実セッションで Write → 自動表示 | — |
-| M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | — |
+| M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | ✅ 2026-06-24(.icns 生成 + bundle 組込み・Theme 定数化・README 新規。TREE 展開ポリシー UI 採用は M7 マージ後のフォローアップに送り。03 §5 M9) |
 
 ## 4. 検証実行の注意
 
@@ -99,3 +99,18 @@
 | 6 | churn 暴走なし | `node_modules` 配下を大量変更 | 再走査が暴走しない(ignore 無視) | ⬜(GUI 目視) |
 
 > 注: Core(`FileWatcher` 統合 / `WatchEventPolicy` / `Debounce`)は `make test` で閉じる。live reload・スクロール維持の体感は GUI 手動。100KB/500KB/1MB の再描画時間の実測は GUI 目視項目に含める。
+
+### M9: デザイン仕上げ・.icns・README
+
+実施: 2026-06-24(`make install` 後のバンドル版 + README 通読)。
+
+| # | 項目 | 手順 | 期待 | 結果 |
+|---|---|---|---|---|
+| 1 | .icns 生成 | `bash scripts/build-icon.sh` | `Support/icon/AppIcon.icns` が生成される | ✅ 2026-06-24 |
+| 2 | bundle 組込み | `make install` | `~/Applications/HTMLViewer.app/Contents/Resources/AppIcon.icns` が存在 / `Info.plist` に `CFBundleIconFile=AppIcon` | ✅ 2026-06-24 |
+| 3 | Dock / Launchpad / Finder 表示 | `open -a HTMLViewer` | Dock のアプリアイコンが新しいモノグラム | ⬜(GUI 目視) |
+| 4 | README セットアップ通し | README 手順を初見視点で 1 通り走らせる | 5 分以内にアプリ起動 + フォルダ登録まで完了 | ⬜(GUI 手動) |
+| 5 | TREE 展開ポリシー UI(申し送り) | M7 マージ後に `defaultExpanded` を `SidebarView` に結線 | dir 総数 > 40 で第一階層のみ展開 | ⬜(M7 後フォロー) |
+| 6 | モック比較ポリッシュ(申し送り) | M5/M6/M7 マージ後に `docs/assets/design-mock-b.html` と並べて差分洗い出し | サイドバー余白・アクセント・空状態の表現が揃う | ⬜(M5/6/7 後フォロー) |
+
+> 注: 本 M は main 由来ブランチで実装したため、M5/M6/M7 の UI(EXTERNAL バッジ・live reload・TREE/検索/キー)はマージ後にしか触れない。UI ポリッシュ系の項目は申し送りとして残す。.icns・README・Theme 定数化は本 M で完了。
