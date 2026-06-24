@@ -148,5 +148,11 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - 🟢-2: key monitor の `case "r"` を `where !cmd && !shift` に明示限定 + コメントで Shift+R="R" の分岐を説明(可読性)
   - 🟢-1(visibleLeaves 二重計算)/ 🟢-3(`FileWatcher.events` single consumer・M7 では未使用)は M9/後続送りで据え置き
   - テスト計 64(`TreeBuilder.expansionSet` +3)。展開 UX の目視確認は作者の GUI 検証に委ねる(再帰 DisclosureGroup の展開/折りたたみ挙動はユニットテスト対象外)
+- **brush-up 第2ラウンド(2026-06-24・`/code-review high` 5 件)**:
+  - #1: key monitor がテキスト入力フォーカス(検索フィールド + **プレビュー WKWebView 内の `<input>`/`<textarea>`**)を透過するよう、`isSearchFocused` に加えて `NSApp.keyWindow?.firstResponder` チェーン(`NSText` / `WKWebView` 祖先)を判定(`keyEventShouldYieldToFocus`)。in-page フォーム入力が j/k/r/`/` に飲まれる不具合を解消
+  - #2: `recentFiles` で EXTERNAL ピンも検索クエリでフィルタ(`search.filter([pin], query:).first`)。非マッチのピンが検索結果に居残る・j/k 可視列に混入する不具合を解消
+  - #3/#4: 選択が可視 leaf 外(TREE 折りたたみ / タブ切替で隠れた)のとき j/k が先頭ジャンプしていたのを、`SelectionLogic.next(after:in:fullOrder:direction:)` を追加し**全 leaf 順序基準で同方向の最近可視 leaf へ**移すよう改善(選択維持=プレビューは変えず、移動は j/k 時のみ)。共通パスは既存 `next` に委譲=回帰なし
+  - #5: key monitor の修飾判定を `deviceIndependentFlagsMask` で正規化し、`option`/`control` が乗ったキー(⌥r='®' / ⌃r 等)を横取りしないよう全ビューアキー(j/k/r/`/`)に適用
+  - テスト計 82(`SelectionLogic` 全順序オーバーロード +2)。#1 の WKWebView フォーカス透過挙動は firstResponder チェーン依存のためユニットテスト対象外 → 作者の GUI 検証に委ねる
 
 (M8 以降、完了時に追記)

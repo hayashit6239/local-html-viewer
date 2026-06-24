@@ -83,9 +83,11 @@ final class AppState {
 
     /// RECENT タブ用: 検索適用後を mtime 降順 + 先頭に EXTERNAL ピンを合成(既出なら omit = 二重解消)。
     /// 検索(M7)と EXTERNAL ピン(M5)の合成: フィルタ → ソート → ピン先頭合成。
+    /// ピンも検索クエリでフィルタする(非マッチのピンを検索結果に居残らせない — M7 review #2)。
     var recentFiles: [HTMLFile] {
         let sorted = RecentSorter.sortedByModificationDateDescending(filteredFiles)
-        return ExternalOpenPolicy.compose(recent: sorted, pinned: pinnedExternal)
+        let visiblePin = pinnedExternal.flatMap { search.filter([$0], query: searchText).first }
+        return ExternalOpenPolicy.compose(recent: sorted, pinned: visiblePin)
     }
 
     /// TREE タブ用: 検索適用後の階層。
@@ -102,8 +104,13 @@ final class AppState {
     }
 
     /// j(down)/k(up)で選択を移動し即プレビュー。
+    /// 選択が可視列に無い(TREE で折りたたみ/タブ切替により隠れた)ときは、全 leaf 順序を
+    /// 基準に同方向の最近可視 leaf へ移し、先頭ジャンプを防ぐ(M7 review #3/#4)。
     func moveSelection(_ direction: SelectionDirection) {
-        selectedFile = SelectionLogic.next(after: selectedFile, in: visibleLeaves, direction: direction)
+        let fullOrder: [HTMLFile] = selectedTab == .tree ? TreeBuilder.allLeaves(tree) : recentFiles
+        selectedFile = SelectionLogic.next(
+            after: selectedFile, in: visibleLeaves, fullOrder: fullOrder, direction: direction
+        )
     }
 
     /// 選択中ファイルを Finder で表示(未選択なら no-op)。
