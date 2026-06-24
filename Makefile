@@ -1,6 +1,6 @@
 # HTMLViewer — ビルド・検証タスク
 
-.PHONY: build test run install check
+.PHONY: build test run install check icon
 
 # CLT 環境では swift test に Testing.framework の検索パスが自動で渡らないため明示する
 # (素の `swift test` は "no such module 'Testing'" で失敗する — docs/03-implementation.md §5)
@@ -28,6 +28,10 @@ test:
 # (バンドル版と挙動が異なる — docs/03-implementation.md §4)
 run:
 	swift run
+
+# Support/icon/AppIcon.svg → .icns 再生成(SVG 編集後に実行。.icns は checked-in binary)
+icon:
+	bash scripts/build-icon.sh
 
 # .app 組み立て → ad-hoc 署名 → ~/Applications へ配置 → Launch Services 登録
 install:

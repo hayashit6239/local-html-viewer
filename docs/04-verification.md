@@ -31,7 +31,7 @@
 | M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 典型条件(~100KB・rescan 非伴)で 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | ✅ 2026-06-23(着手前スモークで FSEvents 実動実証 → `FileWatcher` 統合 + `WatchEventPolicy`/`Debounce` 単体で計 61 green。live reload / scroll の目視は §5)|
 | M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / `swift test` 0 | — |
 | M8 | hook + settings example | `scripts/test-hooks.sh` が 0 / 実セッションで Write → 自動表示 | — |
-| M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | ✅ 2026-06-24(.icns 生成 + bundle 組込み・Theme 定数化・README 新規。TREE 展開ポリシー UI 採用は M7 マージ後のフォローアップに送り。03 §5 M9) |
+| M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | ⚠️ 部分 2026-06-24(.icns 生成 + bundle 組込み・Theme 定数・README 新規は ✅。**未確認: §5 で GUI 目視 2 件〔#3 Dock 実描画 / #4 README セットアップ通し〕+ 申し送り 2 件〔#5 TREE 展開・#6 モック比較=M5/6/7 マージ後〕**。マージャーは §5 M9 を確認のこと。03 §5 M9 / M9 review #3) |
 
 ## 4. 検証実行の注意
 

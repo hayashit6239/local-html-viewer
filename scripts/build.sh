@@ -35,9 +35,15 @@ cp Support/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 plutil -lint "$APP/Contents/Info.plist"
 
-# .icns コピー(M9: Info.plist の CFBundleIconFile=AppIcon と対応)
+# .icns コピー(M9: Info.plist の CFBundleIconFile=AppIcon と対応)。
+# Info.plist が AppIcon を**無条件で**参照する以上、.icns 欠落は Dock/Finder で generic
+# アイコンに化けるだけで CI/build に検知シグナルが出ない。契約一致のため fail-loud にする
+# (M9 review #4)。再生成は `make icon`(scripts/build-icon.sh)。
 if [ -f Support/icon/AppIcon.icns ]; then
 	cp Support/icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+else
+	echo "ERROR: Support/icon/AppIcon.icns が見つかりません(Info.plist の CFBundleIconFile=AppIcon と不一致)。'make icon' で生成してください" >&2
+	exit 1
 fi
 
 echo "==> codesign (ad-hoc)"
