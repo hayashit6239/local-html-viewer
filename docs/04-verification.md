@@ -30,7 +30,7 @@
 | M5 | 外部オープン完成(EXTERNAL ピン留め。監視は M6 へ集約しスコープ外) | 外部 `.html` を `open -b` → 先頭に EXTERNAL ピン + プレビュー / 内部は通常選択(二重表示なし) | ✅ 2026-06-23(`ExternalOpenPolicy` 6 テスト → 計 51 green。バンドルで外部オープン・再受信・異常系クラッシュなしを確認。ピン+プレビューの目視は §5)|
 | M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 典型条件(~100KB・rescan 非伴)で 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | ✅ 2026-06-23(着手前スモークで FSEvents 実動実証 → `FileWatcher` 統合 + `WatchEventPolicy`/`Debounce` 単体で計 61 green。live reload / scroll の目視は §5)|
 | M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / 展開ポリシー UI 配線 / `swift test` 0 | ⚠️ 部分(Core ✅ / GUI 未実施)2026-06-24(`TreeBuilder`(`expansionSet`/`allDirIDs`)/`SearchProvider`/`SelectionLogic` 計 84 green、build/起動スモーク OK。**§5 手動チェックリスト 11 行はすべて ⬜**=キーモニタ透過条件〔WKWebView responder / NSPanel / option-control / Shift+/〕・DisclosureGroup 展開 UX は単体テスト不能のため**マージ前に作者の GUI 確認が必要**。03 §5 M7 / M7 review #8)|
-| M8 | hook + settings example | `scripts/test-hooks.sh` が 0 / 実セッションで Write → 自動表示 | — |
+| M8 | hook + settings example | `scripts/test-hooks.sh` が 0 / 実セッションで Write → 自動表示 | ✅ 2026-06-24(`make test-hooks` 19/19 green。実 Claude Code セッションでの自動表示は §5 手動) |
 | M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | — |
 
 ## 4. 検証実行の注意
@@ -119,3 +119,18 @@
 | 11 | 折りたたみ中の j/k | dir を折りたたんで j/k 移動 | 折りたたみ dir 配下の leaf は飛ばす(可視 leaf のみ移動) | ⬜(GUI 目視) |
 
 > 注: Core(`TreeBuilder`/`SearchProvider`/`SelectionLogic`、展開合成 `expansionSet` 含む)は `make test` で閉じる。キーモニタ・@FocusState・DisclosureGroup 展開 UX の体感は GUI 手動。展開ポリシー(>40 第一階層のみ / 親 dir 自動展開 / 検索ヒット展開)は M7 brush-up(2026-06-24)で UI 配線済み(Core `expansionSet` + 再帰 `DisclosureGroup`)。
+
+### M8: Claude Code hook(open-html.sh + settings example)
+
+実施: 2026-06-24(`make test-hooks` で hook シェルの入力解析・スロットルを担保。実セッション動作は手動)。
+
+| # | 項目 | 手順 | 期待 | 結果 |
+|---|---|---|---|---|
+| 1 | hook 単体テスト | `make test-hooks` | 19 ケース全部 green(.html/.htm/.HTML 受理 / 非 .html・無効 JSON で no-op / 同一スロットル・別ファイル透過・throttle=0 透過) | ✅ 2026-06-24 |
+| 2 | 設定マージ | `~/.claude/settings.json` に `hooks/settings.json.example` をマージ | Claude Code 再起動後に hook が登録される | ⬜(GUI 手動) |
+| 3 | 自動表示 | Claude Code で `.html` を Write/Edit | アプリが起動 → 表示(EXTERNAL ピン or 内部選択) | ⬜(GUI 手動) |
+| 4 | 連打抑止 | 同一 `.html` を 5 秒以内に複数回 Edit | アプリ側の表示が安定(ピン churn なし) | ⬜(GUI 手動) |
+| 5 | フォーカス維持 | hook 経由で `.html` 生成中もエディタを操作 | `-g` でフォーカスを奪わない | ⬜(GUI 手動) |
+| 6 | 既知の限界 | Bash heredoc で `.html` を生成 | 検知されない(matcher は Write/Edit/MultiEdit のみ) | ⬜(GUI 手動) |
+
+> 注: hook シェル本体は `make test-hooks` の 19 ケースで担保(状態ファイル + open 呼び出しを観測点に)。実 Claude Code セッションでの end-to-end は GUI 手動。
