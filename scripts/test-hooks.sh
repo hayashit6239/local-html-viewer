@@ -116,6 +116,48 @@ else
     echo "✘ 破損 state expected open=1/stderr空 got open=${calls} stderr=${stderr_bytes}B"; FAIL=$((FAIL+1))
 fi
 
+echo "-- '-' 始まりの file_path でも open 1 回 + 引数に '--' セパレータ(M8 review #1)--"
+rm -f "$OPEN_COUNT_FILE"
+STATE="$TMP/state-dash"
+HTMLVIEWER_HOOK_STATE_DIR="$STATE" HTMLVIEWER_HOOK_THROTTLE=5 \
+    OPEN_COUNT_FILE="$OPEN_COUNT_FILE" OPEN_CMD="$STUB" \
+    bash "$HOOK" <<<'{"tool_input":{"file_path":"-W.html"}}'
+calls=$(count_calls)
+if [ "$calls" -eq 1 ] && grep -q -- '-- -W.html' "$OPEN_COUNT_FILE"; then
+    echo "✔ '-' 始まりパスで open=${calls} + '--' 付与"; PASS=$((PASS+1))
+else
+    echo "✘ '-' 始まりパス expected open=1/'--'付与 got open=${calls} args=[$(cat "$OPEN_COUNT_FILE" 2>/dev/null)]"; FAIL=$((FAIL+1))
+fi
+
+echo "-- THROTTLE 非数値(off)は既定 5 に正規化しエラーを出さない(M8 review #2)--"
+rm -f "$OPEN_COUNT_FILE"
+STATE="$TMP/state-badthrottle"
+stderr_file="$TMP/badthrottle-stderr"
+for _ in 1 2; do
+    HTMLVIEWER_HOOK_STATE_DIR="$STATE" HTMLVIEWER_HOOK_THROTTLE=off \
+        OPEN_COUNT_FILE="$OPEN_COUNT_FILE" OPEN_CMD="$STUB" \
+        bash "$HOOK" <<<'{"tool_input":{"file_path":"/tmp/t.html"}}' 2>>"$stderr_file"
+done
+calls=$(count_calls); stderr_bytes=$(wc -c < "$stderr_file" | tr -d ' ')
+if [ "$calls" -eq 1 ] && [ "$stderr_bytes" -eq 0 ]; then
+    echo "✔ THROTTLE=off で正規化(同一連発 open=${calls} / stderr 空)"; PASS=$((PASS+1))
+else
+    echo "✘ THROTTLE=off expected open=1/stderr空 got open=${calls} stderr=${stderr_bytes}B"; FAIL=$((FAIL+1))
+fi
+
+echo "-- state 書き込み後に一時ファイル(.PID)が残らない(M8 review #3 アトミック)--"
+rm -f "$OPEN_COUNT_FILE"
+STATE="$TMP/state-atomic"
+HTMLVIEWER_HOOK_STATE_DIR="$STATE" HTMLVIEWER_HOOK_THROTTLE=5 \
+    OPEN_COUNT_FILE="$OPEN_COUNT_FILE" OPEN_CMD="$STUB" \
+    bash "$HOOK" <<<'{"tool_input":{"file_path":"/tmp/a.html"}}'
+leftover=$(find "$STATE" -name 'last-open.*' 2>/dev/null | wc -l | tr -d ' ')
+if [ -r "$STATE/last-open" ] && [ "$leftover" -eq 0 ]; then
+    echo "✔ state 確定 + tmp 残骸なし(leftover=${leftover})"; PASS=$((PASS+1))
+else
+    echo "✘ アトミック書込 expected last-open存在/tmp残骸0 got leftover=${leftover}"; FAIL=$((FAIL+1))
+fi
+
 echo
 echo "PASS: $PASS / FAIL: $FAIL"
 [ "$FAIL" -eq 0 ]

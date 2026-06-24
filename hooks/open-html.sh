@@ -13,6 +13,11 @@
 
 BUNDLE_ID="${HTMLVIEWER_BUNDLE_ID:-com.hayashi.htmlviewer}"
 THROTTLE_SECONDS="${HTMLVIEWER_HOOK_THROTTLE:-5}"
+# THROTTLE_SECONDS が非数値(誤設定 `off` 等)だと `[ ... -lt "$THROTTLE_SECONDS" ]` が
+# stderr に integer エラーを出すため、読み取り時点で既定 5 に正規化する(state 側の数値ガードと対称 — M8 review #2)。
+case "$THROTTLE_SECONDS" in
+    '' | *[!0-9]*) THROTTLE_SECONDS=5 ;;
+esac
 STATE_DIR="${HTMLVIEWER_HOOK_STATE_DIR:-$HOME/.cache/htmlviewer}"
 STATE_FILE="$STATE_DIR/last-open"
 OPEN_CMD="${OPEN_CMD:-open}"
@@ -66,8 +71,12 @@ if [ -r "$STATE_FILE" ]; then
             ;;
     esac
 fi
-printf '%s\t%s\n' "$now" "$file_path" > "$STATE_FILE" 2>/dev/null || true
+# state 書き込みは tmp に書いて rename(POSIX アトミック)。並走 hook の truncate+write 交錯で
+# last-open が部分破損するのを防ぐ(M8 review #3)。tmp 名は PID で衝突回避。
+tmp_state="$STATE_FILE.$$"
+printf '%s\t%s\n' "$now" "$file_path" > "$tmp_state" 2>/dev/null && mv -f "$tmp_state" "$STATE_FILE" 2>/dev/null || rm -f "$tmp_state" 2>/dev/null || true
 
-# 起動(失敗しても exit 0)
-"$OPEN_CMD" -g -b "$BUNDLE_ID" "$file_path" >/dev/null 2>&1 || true
+# 起動(失敗しても exit 0)。`-` 始まりの file_path を open(1) がオプション誤解釈しないよう
+# `--`(end-of-options)を置く(M8 review #1: CONFIRMED — 例 `-W.html` で誤起動)。
+"$OPEN_CMD" -g -b "$BUNDLE_ID" -- "$file_path" >/dev/null 2>&1 || true
 exit 0

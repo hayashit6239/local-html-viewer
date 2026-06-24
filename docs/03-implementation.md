@@ -107,7 +107,8 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
 - `hooks/settings.json.example`(新規・最小手書き): `PostToolUse` × `Write|Edit|MultiEdit` matcher。command パスは `$HOME` プレースホルダ。**この example は純 JSON**(Claude Code hooks スキーマ未定義の `_comment` キーを置かない — 将来の strict 検証で弾かれないため。M8 review #2)。**設定手順は本書が正準**: ユーザーは `~/.claude/settings.json` に**マージ**する(全置換ではない)/ `command` パスを自分の clone 先に合わせて書き換える
 - `scripts/test-hooks.sh` + `make test-hooks`: JSON fixture で入力解析・拡張子フィルタ・スロットルを検証。`OPEN_CMD` で `open` を stub に差し替え呼び出し回数を計測(`HTMLVIEWER_HOOK_THROTTLE` / `HTMLVIEWER_HOOK_STATE_DIR` で各テストを独立)。**11 ケース green**。セットアップ(`mktemp` / stub heredoc / `chmod`)失敗は `|| exit 1` で fail-loud にし、CI で fixture 環境が壊れた際の false-pass を防ぐ(M8 review #4)
 - **テスト容易化の知見**: シェル hook は副作用(`open` の呼び出し回数 + 状態ファイルの更新)を観測点にした。Core(Swift)の TDD と非対称だが、シェルの責務が「フィルタ + スロットル + 起動」と少ないため十分担保できる
-- **堅牢化(M8 review)**: `open-html.sh` のスロットルは `last_epoch` を**数値ガード**(`case`)してから算術展開する(state 破損で `$((...))` が stderr エラーを出さない・スロットル抜けで open 継続 — #1)。stdin 読取は `payload="$(cat 2>/dev/null)"`(コマンド置換は exit code 非伝播のため `|| true` は死コード — #3)
+- **堅牢化(M8 review 第1ラウンド)**: `open-html.sh` のスロットルは `last_epoch` を**数値ガード**(`case`)してから算術展開する(state 破損で `$((...))` が stderr エラーを出さない・スロットル抜けで open 継続 — #1)。stdin 読取は `payload="$(cat 2>/dev/null)"`(コマンド置換は exit code 非伝播のため `|| true` は死コード — #3)
+- **堅牢化(M8 review 第2ラウンド)**: (#1) `open` 起動に **`--`(end-of-options)** を置き、`-` 始まりの file_path を `open(1)` がオプション誤解釈するのを防ぐ(`-W.html` 等で誤起動する CONFIRMED bug)。(#2) `THROTTLE_SECONDS` env も読み取り時に **数値正規化**(非数値は既定 5)し、`[ -lt ]` の integer エラーを防ぐ(state 側 epoch ガードと対称)。(#3) state 書き込みを **tmp + `mv -f`(POSIX アトミック rename)** にし、並走 hook の truncate+write 交錯による部分破損を防ぐ。test-hooks を 12 → 15 ケースに拡張(`--` 付与 / THROTTLE 正規化 / tmp 残骸なし)
 - スコープ外: Bash heredoc 経由の HTML 生成検知(matcher 拡張は誤発火増で送り)・hook 設定の自動インストーラ(マージはユーザー手作業)
 
 ### M4(2026-06-17)
