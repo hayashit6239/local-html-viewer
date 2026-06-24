@@ -30,13 +30,32 @@ struct WebViewContainer: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         private var lastLoadedPath: String?
         private var lastReloadToken = Int.min
+        /// リロード(同一ファイル再読込)時に復元するスクロール位置。ファイル切替時は nil。
+        private var pendingScroll: (x: Double, y: Double)?
 
         /// 同一ファイル & 同一トークンなら再ロードしない(updateNSView の再ロードループ防止)。
         /// リロードは reload() でなく loadFileURL 再実行(read-access 再付与が確実)。
+        /// 同一ファイルの reload はスクロール位置をベストエフォートで維持する(M6)。
         func load(file: HTMLFile, reloadToken: Int, into webView: WKWebView) {
-            guard file.path != lastLoadedPath || reloadToken != lastReloadToken else { return }
+            let samePath = file.path == lastLoadedPath
+            guard !samePath || reloadToken != lastReloadToken else { return }
+            let isReload = samePath  // 同一ファイルの再読込(トークン変化)
             lastLoadedPath = file.path
             lastReloadToken = reloadToken
+
+            if isReload {
+                // リロード前に現在のスクロール位置を退避(JS は非同期なので退避完了後にロード)
+                webView.evaluateJavaScript("[window.scrollX, window.scrollY]") { [weak self] result, _ in
+                    if let a = result as? [Double], a.count == 2 { self?.pendingScroll = (a[0], a[1]) }
+                    self?.performLoad(file, into: webView)
+                }
+            } else {
+                pendingScroll = nil  // ファイル切替は復元しない
+                performLoad(file, into: webView)
+            }
+        }
+
+        private func performLoad(_ file: HTMLFile, into webView: WKWebView) {
             let fileURL = URL(fileURLWithPath: file.path, isDirectory: false)
             // 内部ファイル: allowingReadAccessTo は所属ルート dir(同フォルダの相対 css/img を読むため。
             //   isDirectory: true を明示しないと hasDirectoryPath が FS stat 依存になり読み取りが縮退する)。
@@ -48,6 +67,17 @@ struct WebViewContainer: NSViewRepresentable {
         }
 
         // MARK: - WKNavigationDelegate
+
+        /// ロード完了時にスクロール位置を復元(ベストエフォート)。レンダリング遅延に備え 200ms 後に再試行。
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard let scroll = pendingScroll else { return }
+            pendingScroll = nil
+            let js = "window.scrollTo(\(scroll.x), \(scroll.y))"
+            webView.evaluateJavaScript(js)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                webView.evaluateJavaScript(js)  // = didFinish 後のレンダリング完了 lag への二段復元
+            }
+        }
 
         func webView(
             _ webView: WKWebView,

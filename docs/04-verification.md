@@ -28,7 +28,7 @@
 | M3 | 走査 + RECENT リスト + フォルダ登録永続化 | 登録 → mtime 降順表示 / 再起動で保持 / node_modules 除外 / `swift test` 0 | ✅ 2026-06-15(Core テスト green。走査→ソートの受け入れ条件をテスト化)。2026-06-16 再レビュー反映: ignore case-insensitive 化・TCC 検知/案内・A-1 撤退基準(05 D9)を追加し Core 27 テスト green。GUI 手動検証は §5 チェックリストで担保 |
 | M4 | WKWebView プレビュー + 起動時最新表示 + reveal + JS パネル | クリックでプレビュー / 起動直後に最新表示 / `alert()` fixture でダイアログ表示 | ✅ 2026-06-17(`NavigationPolicy` 5 テスト → 計 33 green、build/起動スモーク OK。レンダリング・JS ダイアログ・reveal は §5 手動チェックリストで担保) |
 | M5 | 外部オープン完成(EXTERNAL ピン留め。監視は M6 へ集約しスコープ外) | 外部 `.html` を `open -b` → 先頭に EXTERNAL ピン + プレビュー / 内部は通常選択(二重表示なし) | ✅ 2026-06-23(`ExternalOpenPolicy` 6 テスト → 計 51 green。バンドルで外部オープン・再受信・異常系クラッシュなしを確認。ピン+プレビューの目視は §5)|
-| M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | — |
+| M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 典型条件(~100KB・rescan 非伴)で 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | ✅ 2026-06-23(着手前スモークで FSEvents 実動実証 → `FileWatcher` 統合 + `WatchEventPolicy`/`Debounce` 単体で計 61 green。live reload / scroll の目視は §5)|
 | M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / `swift test` 0 | — |
 | M8 | hook + settings example | `scripts/test-hooks.sh` が 0 / 実セッションで Write → 自動表示 | — |
 | M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | — |
@@ -84,3 +84,18 @@
 | 6 | 単体 read-access | 外部ファイルの相対参照 | 親フォルダを晒さずファイル単体スコープ | ⬜(GUI 目視) |
 
 > 注: Core(`ExternalOpenPolicy`)は `make test` で閉じる。ピン表示・プレビュー・read-access スコープの目視は GUI 手動。
+
+### M6: FileWatcher + live reload + スクロール維持
+
+実施: 2026-06-23(`make install` 後のバンドル版・合成 HTML)。FSEvents 実動は `make test` の `FileWatcher` 統合テストで担保。
+
+| # | 項目 | 手順 | 期待 | 結果 |
+|---|---|---|---|---|
+| 1 | FSEvents 実動 | `make test`(`FileWatcher` 統合) | temp dir の `.html` 作成イベントを受信 | ✅ 2026-06-23(0.45s) |
+| 2 | 表示中の live reload | 表示中ファイルへ追記 | 典型条件(~100KB)で 1 秒以内に再描画 | ⬜(GUI 目視) |
+| 3 | スクロール維持 | 長い表示中ファイルをスクロール → 追記 | 再描画後もスクロール位置を維持(ベストエフォート) | ⬜(GUI 目視) |
+| 4 | 新規 .html 出現 | 登録フォルダに新規 `.html` を作成 | RECENT に自動出現 | ⬜(GUI 目視) |
+| 5 | 削除時挙動 | 表示中ファイルを削除 | 次イベントで rescan → 最新再選択(M4 挙動) | ⬜(GUI 目視) |
+| 6 | churn 暴走なし | `node_modules` 配下を大量変更 | 再走査が暴走しない(ignore 無視) | ⬜(GUI 目視) |
+
+> 注: Core(`FileWatcher` 統合 / `WatchEventPolicy` / `Debounce`)は `make test` で閉じる。live reload・スクロール維持の体感は GUI 手動。100KB/500KB/1MB の再描画時間の実測は GUI 目視項目に含める。

@@ -125,4 +125,17 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - `handleOpenedURLs` の `fileExists=false` ブランチで `unreadable` を立てる(ピン中以外の死パスでも silent drop しない)。ピン中の場合は `selectedFile?.path == cpath` なら同時にクリア(🟡-2)
   - docs/02 §2: 削除検知は **odoc 再受信時のみ**(`r` キー / 再読込ボタン経路は対象外、WebKit エラーで気づく前提)を明文化。受信時の読めないパスは「読めない」表示(ピンしない)を併記(🟡-3 仕様確定)
 
-(M6 以降、完了時に追記)
+### M6(2026-06-23)
+- **着手前スモーク**: `FileWatcherTests` で temp dir に `.html` 作成 → イベント受信(timeLimit 付き)を実証。**FSEvents は CLT + 実行環境で実動**(0.45s で green)→ 撤退路ポーリング(D4/D9)は不要だった。flags `kFSEventStreamCreateFlagFileEvents | UseCFTypes | WatchRoot` も版差なし
+- Core: `FileWatcher`(FSEvents → `AsyncStream<[String]>`。`@unchecked Sendable` + 専用 serial queue。C コールバックは `FSEventStreamContext.info` + `Unmanaged`。`stop()` は Stop→Invalidate→Release + `isStopping` ガード)/ `WatchEventPolicy`(`.ignore`/`.reloadDisplayed`/`.rescan` 判定。入力は canonical 正規化済み前提・純関数)/ `Debounce.coalesce`(debounce 意味論を決定論テストで固定)/ `PathNormalizer.canonical`(M5/M6 共通の正規化ヘルパ)。テスト計 61
+- AppState 結線(薄い 4 段): `for await batch in watcher.events` → `pendingWatchPaths` 蓄積 + 300ms debounce(Task cancel)→ `WatchEventPolicy.decide`(canonical 正規化して投入)→ `rescan()` / `reloadPreview()`。フォルダ登録変更で `rebuildWatcher`(FSEvents はパス追加不可)。到達不能ルートは除外(fail-silent)。`reloadDisplayed` でも表示中が消えていれば `rescan`(M4 削除時挙動)
+- `WebViewContainer`: reload 時にスクロール位置を退避(`evaluateJavaScript("[scrollX,scrollY]")`)→ `didFinish` で `scrollTo` + 200ms 後に再試行(二段・ベストエフォート)。ファイル切替時は復元しない
+- 数値の根拠: latency `0.3s`(D4)/ debounce `300ms`(Claude の連続保存の典型間隔)/ 二段復元 `200ms`(`didFinish` 後のレンダリング完了 lag)
+- スコープ外: TREE/検索/キー=M7。外部ファイル監視は持たない(M5 と非共有)。スクロール完全復元は非目標
+- 波及: M5(#16)本文 Context の「M6 に相乗り」記述は監視非共有に対称修正済み
+- **brush-up(2026-06-23)**: PR #23 `/code-review` 指摘を反映
+  - 🟡-3: `AppState` に `@MainActor` を明示注記(従来は `Package.swift` の `.defaultIsolation(MainActor.self)` で実質 MainActor だったが、`watchTask` / `debounceTask` の `for await` / closure 隔離が暗黙だった点を自衛。Swift 6 strict concurrency / SDK 更新 / 設定変更に対する前駆対策)
+  - 🟡-2: **debounce の Core 純化(clock 注入式)は M9 ポリッシュ判断送り**で恒久化を明示(レビュー提案 (B))。Core 側は `Debounce.coalesce`(events 列 → fired 列の純関数)で意味論回帰を固定 + AppState は Task cancel + `Task.sleep` でランタイム実装、という二層構造を意図的に受け入れる。actor/clock 駆動への昇格は M9 で他のポリッシュとまとめて判断する
+  - 🟡-1(典型条件 ~100KB の実測 1 行記録)は GUI 操作が必要なため、本 brush-up では **未充足のまま残置**。作者が手動 stopwatch で 100KB / 500KB / 1MB の再描画時間を計測 → `docs/04` M6 §5 注に追記して closure する(マージブロッカーではないがフォローアップ TODO)
+
+(M7 以降、完了時に追記)
