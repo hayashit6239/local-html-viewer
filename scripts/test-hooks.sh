@@ -158,6 +158,65 @@ else
     echo "✘ アトミック書込 expected last-open存在/tmp残骸0 got leftover=${leftover}"; FAIL=$((FAIL+1))
 fi
 
+echo "-- tab 無しの破損 state は無視され、エラーを出さず open 1 回(M8 review #2)--"
+rm -f "$OPEN_COUNT_FILE"
+STATE="$TMP/state-notab"
+mkdir -p "$STATE" || exit 1
+printf '12345\n' > "$STATE/last-open" || exit 1   # tab 無し(部分書込破損を模す)
+stderr_file="$TMP/notab-stderr"
+HTMLVIEWER_HOOK_STATE_DIR="$STATE" HTMLVIEWER_HOOK_THROTTLE=5 \
+    OPEN_COUNT_FILE="$OPEN_COUNT_FILE" OPEN_CMD="$STUB" \
+    bash "$HOOK" <<<'{"tool_input":{"file_path":"/tmp/n.html"}}' 2>"$stderr_file"
+calls=$(count_calls); stderr_bytes=$(wc -c < "$stderr_file" | tr -d ' ')
+if [ "$calls" -eq 1 ] && [ "$stderr_bytes" -eq 0 ]; then
+    echo "✔ tab 無し破損 state で open=${calls} / stderr 空"; PASS=$((PASS+1))
+else
+    echo "✘ tab 無し破損 state expected open=1/stderr空 got open=${calls} stderr=${stderr_bytes}B"; FAIL=$((FAIL+1))
+fi
+
+echo "-- '-a ...' 注入を含む .html パスも '--' で 1 パス扱い(M8 review #8 負テスト)--"
+rm -f "$OPEN_COUNT_FILE"
+STATE="$TMP/state-inject"
+HTMLVIEWER_HOOK_STATE_DIR="$STATE" HTMLVIEWER_HOOK_THROTTLE=5 \
+    OPEN_COUNT_FILE="$OPEN_COUNT_FILE" OPEN_CMD="$STUB" \
+    bash "$HOOK" <<<'{"tool_input":{"file_path":"-a Calculator.app.html"}}'
+calls=$(count_calls)
+# `--` の直後に注入文字列が 1 トークン(パス)として現れる = open(1) のフラグ誤解釈を防げている
+if [ "$calls" -eq 1 ] && grep -q -- '-- -a Calculator.app.html' "$OPEN_COUNT_FILE"; then
+    echo "✔ '-a' 注入も '--' でパス扱い(open=${calls})"; PASS=$((PASS+1))
+else
+    echo "✘ '-a' 注入 expected open=1/'--'保護 got open=${calls} args=[$(cat "$OPEN_COUNT_FILE" 2>/dev/null)]"; FAIL=$((FAIL+1))
+fi
+
+# 注: jq 不在 → python3 フォールバックの強制テストは、PATH を絞ると macOS の /usr/bin/python3
+# (CLT shim)が環境不足でハングするため安定実行できない。dual fallback は維持し(M8 review #4)、
+# python3 分岐は単純な heredoc として据え置く(本テストでは検証しない)。
+
+echo "-- HTMLVIEWER_HOOK_DEBUG=1 で open 失敗時に last-error が残る(M8 review #5)--"
+rm -f "$OPEN_COUNT_FILE"
+STATE="$TMP/state-debug"
+# OPEN_CMD を必ず失敗するコマンドにして DEBUG ログを誘発
+HTMLVIEWER_HOOK_STATE_DIR="$STATE" HTMLVIEWER_HOOK_THROTTLE=5 HTMLVIEWER_HOOK_DEBUG=1 \
+    OPEN_COUNT_FILE="$OPEN_COUNT_FILE" OPEN_CMD="false" \
+    bash "$HOOK" <<<'{"tool_input":{"file_path":"/tmp/d.html"}}'
+if [ -s "$STATE/last-error" ] && grep -q 'open failed' "$STATE/last-error"; then
+    echo "✔ DEBUG=1 で open 失敗が last-error に記録"; PASS=$((PASS+1))
+else
+    echo "✘ DEBUG ログ expected last-error に 'open failed' got [$(cat "$STATE/last-error" 2>/dev/null)]"; FAIL=$((FAIL+1))
+fi
+
+echo "-- 既定(DEBUG 無し)では last-error を作らない --"
+rm -f "$OPEN_COUNT_FILE"
+STATE="$TMP/state-nodebug"
+HTMLVIEWER_HOOK_STATE_DIR="$STATE" HTMLVIEWER_HOOK_THROTTLE=5 \
+    OPEN_COUNT_FILE="$OPEN_COUNT_FILE" OPEN_CMD="false" \
+    bash "$HOOK" <<<'{"tool_input":{"file_path":"/tmp/d.html"}}'
+if [ ! -e "$STATE/last-error" ]; then
+    echo "✔ DEBUG 無しで last-error 不在"; PASS=$((PASS+1))
+else
+    echo "✘ DEBUG 無しなのに last-error が存在"; FAIL=$((FAIL+1))
+fi
+
 echo
 echo "PASS: $PASS / FAIL: $FAIL"
 [ "$FAIL" -eq 0 ]
