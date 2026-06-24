@@ -19,6 +19,7 @@ struct HTMLViewerApp: App {
                     // odoc 受信ハンドラを接続(register → 同期 drain。間に await を挟まない)。
                     // コールド起動でバッファされた odoc をここで取りこぼさず流す。
                     appDelegate.connect { app.handleOpenedURLs($0) }
+                    app.startWatching()  // FSEvents で登録フォルダを監視(M6)
                 }
                 .onAppear { if keyMonitor == nil { keyMonitor = installKeyMonitor(app) } }
                 .onDisappear {
