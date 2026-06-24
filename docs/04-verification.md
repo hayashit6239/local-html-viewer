@@ -27,7 +27,7 @@
 | M2.5 | オープンイベント受信スモーク(最大リスク前倒し) | 未起動で `open -b com.hayashi.htmlviewer <合成.html>` → 受信パスがバナー表示 / 起動中再実行でプロセス数 1(`pgrep -x HTMLViewer \| wc -l`) | ✅ 2026-06-18(`OpenEventPolicy` 5 テスト → 計 33 green。バンドル版で odoc 受信を実機確認: コールド起動受信〔odoc は didFinishLaunching 前に到達 → バッファ→drain〕・単一インスタンス・連続受信で二重なし・異常系クラッシュなし。`application(_:open:)` が発火し plan B 不要。§5 に記録) |
 | M3 | 走査 + RECENT リスト + フォルダ登録永続化 | 登録 → mtime 降順表示 / 再起動で保持 / node_modules 除外 / `swift test` 0 | ✅ 2026-06-15(Core テスト green。走査→ソートの受け入れ条件をテスト化)。2026-06-16 再レビュー反映: ignore case-insensitive 化・TCC 検知/案内・A-1 撤退基準(05 D9)を追加し Core 27 テスト green。GUI 手動検証は §5 チェックリストで担保 |
 | M4 | WKWebView プレビュー + 起動時最新表示 + reveal + JS パネル | クリックでプレビュー / 起動直後に最新表示 / `alert()` fixture でダイアログ表示 | ✅ 2026-06-17(`NavigationPolicy` 5 テスト → 計 33 green、build/起動スモーク OK。レンダリング・JS ダイアログ・reveal は §5 手動チェックリストで担保) |
-| M5 | 外部オープン完成(EXTERNAL ピン留め・一時監視) | M2.5 + 表示まで一気通貫 / Dock アイコン D&D でも開く | — |
+| M5 | 外部オープン完成(EXTERNAL ピン留め。監視は M6 へ集約しスコープ外) | 外部 `.html` を `open -b` → 先頭に EXTERNAL ピン + プレビュー / 内部は通常選択(二重表示なし) | ✅ 2026-06-23(`ExternalOpenPolicy` 6 テスト → 計 51 green。バンドルで外部オープン・再受信・異常系クラッシュなしを確認。ピン+プレビューの目視は §5)|
 | M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | — |
 | M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / `swift test` 0 | — |
 | M8 | hook + settings example | `scripts/test-hooks.sh` が 0 / 実セッションで Write → 自動表示 | — |
@@ -69,3 +69,18 @@
 | 5 | Dock D&D | Dock アイコンへ `.html` をドロップ | 同経路で受信・バナー表示 | ⬜(GUI 手動) |
 
 > 注: odoc 発火の確認は `NSLog` が `log show` で安定捕捉できず、一時センチネルファイル(検証後削除)で実施。`application(_:open:)` は SwiftUI ライフサイクルでも発火し plan B(`kAEOpenDocuments` / `.onOpenURL`)は不要だった。
+
+### M5: 外部オープン(EXTERNAL ピン留め)
+
+実施: 2026-06-23(`make install` 後のバンドル版・合成 HTML)。
+
+| # | 項目 | 手順 | 期待 | 結果 |
+|---|---|---|---|---|
+| 1 | 外部ファイル受信 | 登録外 `.html` を `open -b com.hayashi.htmlviewer <path>` | 先頭に EXTERNAL ピン + プレビュー表示 | ⬜(GUI 目視) |
+| 2 | 内部は通常選択 | 登録フォルダ内の `.html` を `open -b` | ピンせず通常選択(二重表示なし) | ⬜(GUI 目視) |
+| 3 | 同一再受信で reload | 同じ外部ファイルを再 `open -b` | プレビュー再読込・ピン重複なし | ⬜(GUI 目視) |
+| 4 | Dock D&D | Dock アイコンへ外部 `.html` をドロップ | 同経路でピン + プレビュー | ⬜(GUI 目視) |
+| 5 | 異常系 | 非 `.html` / 存在しないパスを `open -b` | クラッシュせず無視(プロセス維持) | ✅ 2026-06-23 |
+| 6 | 単体 read-access | 外部ファイルの相対参照 | 親フォルダを晒さずファイル単体スコープ | ⬜(GUI 目視) |
+
+> 注: Core(`ExternalOpenPolicy`)は `make test` で閉じる。ピン表示・プレビュー・read-access スコープの目視は GUI 手動。

@@ -23,11 +23,20 @@ struct FileRowView: View {
                 .font(.system(size: 9))
                 .foregroundStyle(isSelected ? Theme.amber : Theme.textFaint)
             VStack(alignment: .leading, spacing: 1) {
-                Text(file.name)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(isSelected ? Theme.amber : Theme.text)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 5) {
+                    Text(file.name)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(isSelected ? Theme.amber : Theme.text)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if file.isExternal {
+                        Text("EXTERNAL")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Theme.amber)
+                            .padding(.horizontal, 4).padding(.vertical, 0.5)
+                            .overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.amber.opacity(0.5)))
+                    }
+                }
                 if !directory.isEmpty {
                     Text(directory)
                         .font(.system(size: 10))
