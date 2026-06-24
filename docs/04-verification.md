@@ -111,6 +111,6 @@
 | 3 | Dock / Launchpad / Finder 表示 | `open -a HTMLViewer` | Dock のアプリアイコンが新しいモノグラム | ⬜(GUI 目視) |
 | 4 | README セットアップ通し | README 手順を初見視点で 1 通り走らせる | 5 分以内にアプリ起動 + フォルダ登録まで完了 | ⬜(GUI 手動) |
 | 5 | TREE 展開ポリシー UI(申し送り) | M7 マージ後に `defaultExpanded` を `SidebarView` に結線 | dir 総数 > 40 で第一階層のみ展開 | ⬜(M7 後フォロー) |
-| 6 | モック比較ポリッシュ(申し送り) | M5/M6/M7 マージ後に `docs/assets/design-mock-b.html` と並べて差分洗い出し | サイドバー余白・アクセント・空状態の表現が揃う | ⬜(M5/6/7 後フォロー) |
+| 6 | モック比較ポリッシュ(申し送り) | M7 マージ後に `docs/assets/design-mock-b.html` と並べて差分洗い出し | サイドバー余白・アクセント・空状態の表現が揃う | ⬜(M7 後フォロー) |
 
-> 注: 本 M は main 由来ブランチで実装したため、M5/M6/M7 の UI(EXTERNAL バッジ・live reload・TREE/検索/キー)はマージ後にしか触れない。UI ポリッシュ系の項目は申し送りとして残す。.icns・README・Theme 定数化は本 M で完了。
+> 注: 本ブランチは **M5/M6 を含む**(マージ済み main 由来)。**未マージは M7(TREE/検索/キー)/ M8(hooks)**で、その UI/hooks はマージ後にしか触れない。Theme 定数の call site 配線とモック比較ポリッシュは M7 マージ後の申し送り。.icns・README(完成形)・Theme 定数**定義**は本 M で完了。M9 は M7/M8 の後に最後にマージする前提(README の hooks/キー記載はその時点で実体と整合)。

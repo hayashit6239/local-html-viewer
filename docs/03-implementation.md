@@ -140,9 +140,9 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
 
 ### M9(2026-06-24)
 - **.icns**: `Support/icon/AppIcon.svg`(案 B モノグラム = HTML ブラケット + amber ドット、合成ベクタ・個人意匠なし)→ `scripts/build-icon.sh` で `qlmanage` → `sips` 派生 → `iconutil -c icns` → `Support/icon/AppIcon.icns` を生成。`scripts/build.sh` が Resources にコピー、`Info.plist` に `CFBundleIconFile=AppIcon`
-- **Theme.swift**: `Spacing` / `Radius` 定数を追加(画面間の余白・角丸の一貫性)。既存の色 swatch はそのまま
-- **README.md**(新規): セットアップ・hook 連携・キー操作・既知の制約・開発コマンド・docs リンク・MIT
-- スコープ縮小(率直): 本ブランチは main 由来のため M5/M6/M7 の UI は持たず、**M7 申し送りの「TREE 展開ポリシー UI 採用」は M9 では扱わない**(M7 PR #26 のフォローアップに送る。docs/04 §5 M9 に申し送り記載)。M9 が触る UI は Theme 定数のみで、サイドバー/プレビューのモック比較ポリッシュは M5/M6/M7 マージ後の別アクションが妥当
+- **Theme.swift**: `Spacing` / `Radius` 定数を追加(画面間の余白・角丸の一貫性)。既存の色 swatch はそのまま。**call site への配線(既存 View の literal padding / cornerRadius を定数へ置換)は M7 マージ後にまとめて行うフォローアップ**とし、本 PR では定数定義のみ(M9 review #1: 現状 call site ゼロ=未配線である旨を明示し premature にしない)。配線を M7 後に送るのは、M7 の TREE UI(`TreeRowsView` 等)も同じ定数を使うため、UI が出揃ってから一括置換する方が衝突・取りこぼしが少ないため
+- **README.md**(新規): セットアップ・hook 連携・キー操作・既知の制約・開発コマンド・docs リンク・MIT。**README はアプリ完成形を記載**(hooks=M8 / j/k=M7 / EXTERNAL=M5 等)。M9 は全マイルストーンの最後にマージする前提のため、M7/M8 マージ時にその実体(`hooks/` ディレクトリ・`make test-hooks`・TREE/キー UI)が揃って README と整合する(M9 review #2: マージ順 M5・M6〔済〕→ M7 → M8 → M9)
+- スコープ(率直): 本ブランチは **M5/M6 を含む**(マージ済み main 由来)。**未マージは M7(TREE/検索/キー)/ M8(hooks)**。M7 申し送りの「TREE 展開ポリシー UI 採用」は M7 PR #26 側で対応済み(本 M では扱わない)。M9 が触る UI は Theme 定数定義のみで、サイドバー/プレビューのモック比較ポリッシュは M7 マージ後の別アクションが妥当(docs/04 §5 M9 に申し送り)
 - スコープ外: 配布パッケージ・公証(D2)、メニューバー常駐(`LSUIElement` は引き続き設定しない)
 
 (M10 以降、完了時に追記)
