@@ -31,7 +31,7 @@
 | M6 | FileWatcher + live reload + スクロール維持 | 表示中ファイルへ追記 → 典型条件(~100KB・rescan 非伴)で 1 秒以内に再描画・位置維持 / 新規 .html がリスト出現 / `swift test` 0 | ✅ 2026-06-23(着手前スモークで FSEvents 実動実証 → `FileWatcher` 統合 + `WatchEventPolicy`/`Debounce` 単体で計 61 green。live reload / scroll の目視は §5)|
 | M7 | TREE タブ + 検索 + キーボード | 各キー仕様通り / 検索フォーカス中の j/k はテキスト入力 / 展開ポリシー UI 配線 / `swift test` 0 | ⚠️ 部分(Core ✅ / GUI 未実施)2026-06-24(`TreeBuilder`(`expansionSet`/`allDirIDs`)/`SearchProvider`/`SelectionLogic` 計 84 green、build/起動スモーク OK。**§5 手動チェックリスト 11 行はすべて ⬜**=キーモニタ透過条件〔WKWebView responder / NSPanel / option-control / Shift+/〕・DisclosureGroup 展開 UX は単体テスト不能のため**マージ前に作者の GUI 確認が必要**。03 §5 M7 / M7 review #8)|
 | M8 | hook + settings example | `scripts/test-hooks.sh` が 0 / 実セッションで Write → 自動表示 | ✅ 2026-06-24(`make test-hooks` 19/19 green。実 Claude Code セッションでの自動表示は §5 手動) |
-| M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | — |
+| M9 | デザイン仕上げ + .icns + README | モック比較の目視 / `make check` / README 言語確認 | ⚠️ 部分 2026-06-24(.icns 生成 + bundle 組込み・Theme 定数・README 新規は ✅。**未確認: §5 で GUI 目視 2 件〔#3 Dock 実描画 / #4 README セットアップ通し〕+ 申し送り 2 件〔#5 TREE 展開・#6 モック比較=M5/6/7 マージ後〕**。マージャーは §5 M9 を確認のこと。03 §5 M9 / M9 review #3) |
 
 ## 4. 検証実行の注意
 
@@ -134,3 +134,18 @@
 | 6 | 既知の限界 | Bash heredoc で `.html` を生成 | 検知されない(matcher は Write/Edit/MultiEdit のみ) | ⬜(GUI 手動) |
 
 > 注: hook シェル本体は `make test-hooks` の 19 ケースで担保(状態ファイル + open 呼び出しを観測点に)。実 Claude Code セッションでの end-to-end は GUI 手動。
+
+### M9: デザイン仕上げ・.icns・README
+
+実施: 2026-06-24(`make install` 後のバンドル版 + README 通読)。
+
+| # | 項目 | 手順 | 期待 | 結果 |
+|---|---|---|---|---|
+| 1 | .icns 生成 | `bash scripts/build-icon.sh` | `Support/icon/AppIcon.icns` が生成される | ✅ 2026-06-24 |
+| 2 | bundle 組込み | `make install` | `~/Applications/HTMLViewer.app/Contents/Resources/AppIcon.icns` が存在 / `Info.plist` に `CFBundleIconFile=AppIcon` | ✅ 2026-06-24 |
+| 3 | Dock / Launchpad / Finder 表示 | `make install` → `open -a HTMLViewer`(旧アイコンが残る場合 `killall Dock Finder` で LS cache を更新) | Dock のアプリアイコンが新しいモノグラム。`CFBundleVersion` を 2 に bump 済みのため同名上書きでも LS icon cache は無効化される | ⬜(GUI 目視) |
+| 4 | README セットアップ通し | README 手順を初見視点で 1 通り走らせる | 5 分以内にアプリ起動 + フォルダ登録まで完了 | ⬜(GUI 手動) |
+| 5 | TREE 展開ポリシー UI(申し送り) | M7 マージ後に `defaultExpanded` を `SidebarView` に結線 | dir 総数 > 40 で第一階層のみ展開 | ⬜(M7 後フォロー) |
+| 6 | モック比較ポリッシュ(申し送り) | M7 マージ後に `docs/assets/design-mock-b.html` と並べて差分洗い出し | サイドバー余白・アクセント・空状態の表現が揃う | ⬜(M7 後フォロー) |
+
+> 注: 本ブランチは **M5/M6 を含む**(マージ済み main 由来)。**未マージは M7(TREE/検索/キー)/ M8(hooks)**で、その UI/hooks はマージ後にしか触れない。Theme 定数の call site 配線とモック比較ポリッシュは M7 マージ後の申し送り。.icns・README(完成形)・Theme 定数**定義**は本 M で完了。M9 は M7/M8 の後に最後にマージする前提(README の hooks/キー記載はその時点で実体と整合)。

@@ -192,4 +192,33 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - #2: `rescan` の reconcile(round-4 #6)に **`!sel.isExternal` ガード**を追加(`searchText.didSet` と対称)。TREE で rescan 時に EXTERNAL ピンが内部ファイルへすり替わり外部プレビューが消えるのを防ぐ
   - #3: key monitor で `charactersIgnoringModifiers` を **小文字に正規化**してから判定。Caps Lock 有効時に 'r' が 'R' になり reload/reveal どちらにも落ちず沈黙する問題を解消。reload と reveal は文字でなく修飾(`cmd && shift` か否か)で振り分ける
 
-(M8 以降、完了時に追記)
+### M9(2026-06-24)
+- **.icns**: `Support/icon/AppIcon.svg`(案 B モノグラム = HTML ブラケット + amber ドット、合成ベクタ・個人意匠なし)→ `scripts/build-icon.sh` で `qlmanage` → `sips` 派生 → `iconutil -c icns` → `Support/icon/AppIcon.icns` を生成。`scripts/build.sh` が Resources にコピー、`Info.plist` に `CFBundleIconFile=AppIcon`
+- **Theme.swift**: `Spacing` / `Radius` 定数を追加(画面間の余白・角丸の一貫性)。既存の色 swatch はそのまま。**call site への配線(既存 View の literal padding / cornerRadius を定数へ置換)は M7 マージ後にまとめて行うフォローアップ**とし、本 PR では定数定義のみ(M9 review #1: 現状 call site ゼロ=未配線である旨を明示し premature にしない)。配線を M7 後に送るのは、M7 の TREE UI(`TreeRowsView` 等)も同じ定数を使うため、UI が出揃ってから一括置換する方が衝突・取りこぼしが少ないため
+- **README.md**(新規): セットアップ・hook 連携・キー操作・既知の制約・開発コマンド・docs リンク・MIT。**README はアプリ完成形を記載**(hooks=M8 / j/k=M7 / EXTERNAL=M5 等)。M9 は全マイルストーンの最後にマージする前提のため、M7/M8 マージ時にその実体(`hooks/` ディレクトリ・`make test-hooks`・TREE/キー UI)が揃って README と整合する(M9 review #2: マージ順 M5・M6〔済〕→ M7 → M8 → M9)
+- スコープ(率直): 本ブランチは **M5/M6 を含む**(マージ済み main 由来)。**未マージは M7(TREE/検索/キー)/ M8(hooks)**。M7 申し送りの「TREE 展開ポリシー UI 採用」は M7 PR #26 側で対応済み(本 M では扱わない)。M9 が触る UI は Theme 定数定義のみで、サイドバー/プレビューのモック比較ポリッシュは M7 マージ後の別アクションが妥当(docs/04 §5 M9 に申し送り)
+- スコープ外: 配布パッケージ・公証(D2)、メニューバー常駐(`LSUIElement` は引き続き設定しない)
+- **brush-up 第2ラウンド(2026-06-24・`/code-review high` 5 件)**: すべて採用
+  - #1: `Theme.Radius.badge` を **4 → 3** に整合(`FileRowView`/`ContentView` の既存 `cornerRadius:3` と一致)。配線は M7 後フォローアップのままだが、値を既存と合わせて「定数を編集したのに見た目が変わらない」罠を解消
+  - #2: `build-icon.sh` は `iconutil` 直前に `rm -f "$ICNS"`。iconutil 失敗(set -e 停止)時に**古い .icns が残らず消える** → 次回 `make install` の fail-loud(build.sh)で「再生成したのに古いまま」のサイレント不整合を検知できる
+  - #3: `AppIcon.svg` ハイライト rect の `rx=200`(height=60)を実効 `rx=30` に明示。コメントと実描画の乖離を解消(.icns 再生成。差分は最上部 5% ハイライトの角丸のみで視覚影響は微小)
+  - #4: `qlmanage` の `2>&1` を外し **stderr を残す**(SVG renderer 不在 / QuickLook エラーの原因を握りつぶさない)
+  - #5: iconset を repo 内ではなく `WORK`(mktemp)配下に作成。再生成のたびに `Support/icon/AppIcon.iconset/` 残骸が残らない(trap で自動掃除)
+  - `make icon` で 1024×1024 .icns 再生成・repo に iconset 残骸が出ないことを確認
+- **brush-up 第3ラウンド(2026-06-24・`/code-review high` 7 件)**: すべて採用
+  - #2: `build-icon.sh` で **BASE が 1024px であることを検証**(`sips -g pixelWidth`)。qlmanage が非 1024 を返したとき `sips -z 1024` が silent upscale して blurry な @2x が .icns 化されるのを fail-loud で防ぐ
+  - #3: `Info.plist` の **`CFBundleVersion` を 1 → 2** に bump。アイコンのみ変更でも `(bundle id + version)` で効く Launch Services の icon cache を無効化し、同名上書き install で旧アイコンが残る誤診断を防ぐ(docs/04 §5 M9 #3 に `killall Dock Finder` のフォールバックも併記)
+  - #4: `build.sh` の icns コピーを **`plutil -extract CFBundleIconFile`** で plist から導出。アイコン名の二重定義(plist と build.sh)を解消し契約一致を機械保証
+  - #5: iconset の `@2x ≡ 次サイズ 1x`(例 16x16@2x = 32 = 32x32)の invariant を sips 二重生成から **`cp`** に置換(無駄な sips 削減 + 片方差し替えの誘惑を断つ)
+  - #6: `README.md` 開発セクションに **`make icon`** を追加(SVG 編集者が .icns 再生成に気付けるよう露出)
+  - #1: `Theme.Radius.button=6` に「design-mock-b 想定値・call site 不在のため未検証」を明示(badge の値整合ルールと一貫)
+  - #7: `Theme.swift` / `AppIcon.svg` のコメントから `— M9 review #N` の process trail を剥離(実体ある rationale は残す。art asset は review より長生きするため)
+  - `make icon` で再生成 .icns はバイト同一(cp ベース化でも内容不変)/ build/test/check 維持
+- **brush-up 第4ラウンド(2026-06-24・`/code-review high` 5 件)**: すべて採用
+  - #1: `build.sh` の icns コピーが `plutil ... || true` + `if [ -n ]` で **silent skip に退行**していたのを fail-loud に戻す。`CFBundleIconFile` 抽出失敗/空(plist 破損)は `exit 1`(generic アイコンで build 成功してしまうのを防ぐ)
+  - #3: `ICON_NAME="${ICON_NAME%.icns}"` で末尾 `.icns` を strip。`CFBundleIconFile=AppIcon.icns`(拡張子付きも legal)に変えても `AppIcon.icns.icns` 衝突で誤 abort しない
+  - #2: `build.sh` で **SVG が .icns より新しければ警告**(`-nt`)。`make install` 単独で旧 .icns が bundle される SVG-newer ドリフトに気付かせる(fail はしない。fresh clone は mtime 同値で false-warn しない)
+  - #4: `build-icon.sh` の BASE 検証を **pixelHeight も**に拡張。非正方 viewBox の SVG で width=1024 / height≠1024 の letterbox アイコンが iconutil を通るのを防ぐ
+  - #5: visual asset 変更時の **`CFBundleVersion` +1 ポリシーを明文化**(`build-icon.sh` 末尾のリマインダ + 本節)。自動 bump は no-op 再生成でも version を膨らませるため採らず、リマインダに留める。LS icon cache(bundle id + version)無効化のため**アイコン/SVG を変えたら CFBundleVersion を +1 する**(docs/04 §5 M9 #3 の killall フォールバックと併用)
+
+(M10 以降、完了時に追記)
