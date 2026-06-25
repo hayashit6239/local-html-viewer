@@ -32,10 +32,116 @@ final class AppState {
     /// 読めない(canonicalPath nil 等)受信パス。サイドバーの「読めない」表示に使う。
     private(set) var unreadableExternalPath: String?
 
-    /// RECENT タブ用: mtime 降順 + 先頭に EXTERNAL ピンを合成(既出なら omit = 二重解消)。
+    // MARK: - M7: 検索 / タブ / キーボード
+
+    public enum SidebarTab: Sendable { case recent, tree }
+    /// 表示タブ(RECENT / TREE)。TREE に切り替えたら選択を可視化する展開を取り直す。
+    var selectedTab: SidebarTab = .recent {
+        didSet { if selectedTab == .tree { recomputeTreeExpansion() } }
+    }
+    /// 検索フィールドが first responder か(`@FocusState` のミラー。キーモニタの透過判定に使う)。
+    var isSearchFocused = false
+    /// `/` キーで検索フィールドへフォーカスを要求(インクリメントで発火。SidebarView が監視)。
+    private(set) var focusSearchRequest = 0
+    func requestSearchFocus() { focusSearchRequest &+= 1 }
+    /// インクリメンタル検索クエリ。変化のたびに展開を取り直し、選択を残存ヒットで維持・消えたら先頭へ。
+    /// 展開を 2 回取り直すのは: ①reconcile の入力 `visibleLeaves` が `expandedDirs` に依存するため
+    /// 先に検索ヒットを展開し、②reconcile が選び直した新選択の祖先も展開して可視化するため(M7 review #3)。
+    var searchText = "" {
+        didSet {
+            recomputeTreeExpansion()
+            // EXTERNAL ピンを選択中は検索で選択をすり替えない。ピンは検索リストに出ないため
+            // reconcile が visibleLeaves.first へ飛ばし、見ていた外部プレビューが無関係ファイルへ
+            // スワップするのを防ぐ(M7 review #3)。
+            if selectedFile?.isExternal != true {
+                selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+            }
+            recomputeTreeExpansion()
+        }
+    }
+
+    /// TREE タブで展開中の dir id 集合(`DisclosureGroup` の isExpanded バインディングの源)。
+    /// 既定展開ポリシー・検索ヒット/選択の親 dir 自動展開・ユーザー手動トグルを束ねる(issue #18 決定)。
+    private(set) var expandedDirs: Set<String> = []
+    /// ユーザーが**明示的に折りたたんだ** dir(sticky)。検索/再走査/タブ切替の自動再計算で
+    /// 勝手に開き直さないための overlay(M7 review #1/#4)。手動展開で解除。
+    private var userCollapsedDirs: Set<String> = []
+
+    /// 現在の状態(検索中か / 選択中 leaf)から TREE 展開集合を `TreeBuilder` で取り直す。
+    /// 自動算出した展開集合から「ユーザーが閉じた dir」を差し引く(sticky 折りたたみ)。
+    /// ただし選択中 leaf を見せるための祖先は折りたたみより優先して残す(選択は常に可視)。
+    private func recomputeTreeExpansion() {
+        var set = TreeBuilder.expansionSet(
+            for: tree,
+            searching: !searchText.isEmpty,
+            selectedLeafPath: selectedFile?.path
+        )
+        let selectionAncestors = selectedFile.map { TreeBuilder.ancestors(ofLeaf: $0.path, in: tree) } ?? []
+        set.subtract(userCollapsedDirs.subtracting(selectionAncestors))
+        expandedDirs = set
+    }
+
+    /// dir が展開中か(`SidebarView` の `DisclosureGroup` バインディング用)。
+    func isExpanded(_ dirID: String) -> Bool { expandedDirs.contains(dirID) }
+
+    /// dir の展開/折りたたみをユーザー操作で切り替える。手動操作は `userCollapsedDirs` に記録し、
+    /// 後続の自動再計算で意図が保持されるようにする(M7 review #1)。
+    func setExpanded(_ dirID: String, _ expanded: Bool) {
+        if expanded {
+            expandedDirs.insert(dirID)
+            userCollapsedDirs.remove(dirID)  // 手動展開で sticky collapse を解除
+        } else {
+            expandedDirs.remove(dirID)
+            userCollapsedDirs.insert(dirID)  // 手動折りたたみを sticky 記録
+        }
+    }
+
+    private let search: SearchProvider = FilenameSearchProvider()
+
+    /// 検索適用後のファイル(両タブ共通の入力)。
+    private var filteredFiles: [HTMLFile] {
+        search.filter(allFiles, query: searchText)
+    }
+
+    /// RECENT タブ用: 検索適用後を mtime 降順 + 先頭に EXTERNAL ピンを合成(既出なら omit = 二重解消)。
+    /// 検索(M7)と EXTERNAL ピン(M5)の合成: フィルタ → ソート → ピン先頭合成。
+    /// ピンも検索クエリでフィルタする(非マッチのピンを検索結果に居残らせない — M7 review #2)。
     var recentFiles: [HTMLFile] {
-        let sorted = RecentSorter.sortedByModificationDateDescending(allFiles)
-        return ExternalOpenPolicy.compose(recent: sorted, pinned: pinnedExternal)
+        let sorted = RecentSorter.sortedByModificationDateDescending(filteredFiles)
+        let visiblePin = pinnedExternal.flatMap { search.filter([$0], query: searchText).first }
+        return ExternalOpenPolicy.compose(recent: sorted, pinned: visiblePin)
+    }
+
+    /// TREE タブ用: 検索適用後の階層。
+    var tree: [TreeNode] {
+        TreeBuilder.build(filteredFiles)
+    }
+
+    /// 現タブの可視 leaf 列(j/k の移動対象)。TREE は展開中 dir 配下のみ(折りたたみ dir は飛ばす)。
+    private var visibleLeaves: [HTMLFile] {
+        switch selectedTab {
+        case .recent: return recentFiles
+        case .tree: return TreeBuilder.visibleLeaves(tree, expanded: expandedDirs)
+        }
+    }
+
+    /// j(down)/k(up)で選択を移動し即プレビュー。
+    /// 選択が可視列に無い(TREE で折りたたみ/タブ切替により隠れた)ときは、全 leaf 順序を
+    /// 基準に同方向の最近可視 leaf へ移し、先頭ジャンプを防ぐ。
+    /// 可視列が空(全 dir 折りたたみ等)で nil が返る場合は現選択を維持し、プレビューを消さない(M7 review #1)。
+    func moveSelection(_ direction: SelectionDirection) {
+        let fullOrder: [HTMLFile] = selectedTab == .tree ? TreeBuilder.allLeaves(tree) : recentFiles
+        if let next = SelectionLogic.next(
+            after: selectedFile, in: visibleLeaves, fullOrder: fullOrder, direction: direction
+        ) {
+            selectedFile = next
+        }
+    }
+
+    /// 選択中ファイルを Finder で表示(未選択なら no-op)。
+    func revealSelectedInFinder() {
+        guard let file = selectedFile else { return }
+        revealInFinder(file)
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -68,7 +174,9 @@ final class AppState {
     }
 
     /// 表示中ファイルを再読込する(loadFileURL 再実行。reload() は使わない — docs/03 §2-7)。
+    /// 未選択なら no-op(M7 決定)。
     func reloadPreview() {
+        guard selectedFile != nil else { return }
         reloadToken &+= 1
     }
 
@@ -126,8 +234,15 @@ final class AppState {
             unreadableExternalPath = nil
         }
         if let inter = lastInternal {
+            // 検索中に odoc で開いたファイルが filter で隠れるならクエリをクリアして可視化する
+            // (preview には映るのにリスト・j/k から不可視になるのを防ぐ — M7 review #2)。
+            // searchText の didSet が走るが、直後に selectedFile を inter で上書きするので影響なし。
+            if !searchText.isEmpty, !filteredFiles.contains(where: { $0.path == inter.path }) {
+                searchText = ""
+            }
             selectedFile = inter
             unreadableExternalPath = nil
+            recomputeTreeExpansion()  // odoc で選んだ内部ファイルの祖先 dir を TREE で可視化(M7 review #5)
         } else if lastExternal != nil {
             selectedFile = pinnedExternal  // 内部が無ければ外部ピンを選択
         }
@@ -272,6 +387,24 @@ final class AppState {
             }
             if selectedFile == nil {
                 selectedFile = recentFiles.first
+            }
+            // 削除/再走査で消えた dir id を userCollapsedDirs から除去する。蓄積メモリリークを防ぎ、
+            // 同パスのフォルダが後で再登録/再マウントされたとき「新規フォルダ」が前回の sticky 折りたたみ
+            // を引き継がず初期状態(既定展開)で出るようにする(M7 review #4)。
+            // **全ファイル(result.files)由来のツリー**で intersection する。検索フィルタ後の `tree` で
+            // 行うと、検索中に rescan が走ったとき一時的に隠れている dir が evict され、検索クリア後に
+            // 折りたたみ意図が失われる(round-5 #1)。
+            userCollapsedDirs.formIntersection(TreeBuilder.allDirIDs(TreeBuilder.build(result.files)))
+            // 走査でツリー構造が変わったので展開を取り直す(既定ポリシー + 選択の親 dir 自動展開)。
+            recomputeTreeExpansion()
+            // 検索中に rename 等で選択が filter から外れたら可視列へ reconcile し、
+            // 「ファイルは存在するが検索結果に不可視」状態を解消する(M7 review #6)。
+            // ただし EXTERNAL ピンは TREE の visibleLeaves に出ないため、reconcile で内部ファイルに
+            // すり替わり外部プレビューが消えるのを防ぐ(searchText.didSet と同じガード — round-5 #2)。
+            if !searchText.isEmpty, let sel = selectedFile, !sel.isExternal,
+                !visibleLeaves.contains(where: { $0.id == sel.id }) {
+                selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+                recomputeTreeExpansion()
             }
         }
     }
