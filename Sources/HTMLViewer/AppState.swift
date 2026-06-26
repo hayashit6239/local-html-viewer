@@ -23,8 +23,24 @@ final class AppState {
     private(set) var allFiles: [HTMLFile] = []
     /// MAX_FILES 到達で打ち切ったか。
     private(set) var scanTruncated = false
-    /// 選択中ファイル。WebView でプレビューする。
-    var selectedFile: HTMLFile?
+    /// サイドバーの選択(#32 で `HTMLFile?` から拡張)。TREE で dir を選択できるようになり、
+    /// Enter キー(`activateSelection`)で展開トグルする経路が成立する。プレビュー(`selectedFile`)は
+    /// `.file` のときのみ追従。`.dir` 選択中は直前のファイルプレビューが残る(ちらつき回避)。
+    var selection: SidebarSelection?
+
+    /// プレビュー対象ファイル(後方互換 computed)。`selection` から `.file` を抽出する。
+    /// 既存の `selectedFile = X` 形式の代入は setter で `selection = .file(X)` に橋渡し。
+    /// `.dir` 選択中は nil ではなく直前の `.file` を保つために、setter のみで `selection` を上書きする
+    /// (getter は常に `selection` の `.file` のみを返す = `.dir` 選択中は nil)。
+    var selectedFile: HTMLFile? {
+        get {
+            if case .file(let f) = selection { return f }
+            return nil
+        }
+        set {
+            selection = newValue.map { .file($0) }
+        }
+    }
     /// プレビューの明示リロード要求(loadFileURL 再実行を発火させる単調増加トークン)。
     private(set) var reloadToken = 0
     /// 登録フォルダ外を受信した EXTERNAL ピン(単一・セッション限り・非永続)。RECENT 先頭に合成する。
@@ -51,10 +67,16 @@ final class AppState {
         didSet {
             recomputeTreeExpansion()
             // EXTERNAL ピンを選択中は検索で選択をすり替えない。ピンは検索リストに出ないため
-            // reconcile が visibleLeaves.first へ飛ばし、見ていた外部プレビューが無関係ファイルへ
-            // スワップするのを防ぐ(M7 review #3)。
-            if selectedFile?.isExternal != true {
-                selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+            // reconcile が先頭へ飛ばし、見ていた外部プレビューが無関係ファイルへスワップするのを防ぐ(M7 review #3)。
+            if case .file(let f) = selection, f.isExternal {
+                // keep
+            } else {
+                switch selectedTab {
+                case .recent:
+                    selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+                case .tree:
+                    selection = SelectionLogic.reconcile(previous: selection, in: visibleRows)
+                }
             }
             recomputeTreeExpansion()
         }
@@ -117,7 +139,8 @@ final class AppState {
         TreeBuilder.build(filteredFiles)
     }
 
-    /// 現タブの可視 leaf 列(j/k の移動対象)。TREE は展開中 dir 配下のみ(折りたたみ dir は飛ばす)。
+    /// 現タブの可視 leaf 列(RECENT の j/k 移動対象 / 検索 reconcile 用)。
+    /// TREE は展開中 dir 配下の leaf のみ(folder 行は含まない — 行ベースの可視列は `visibleRows`)。
     private var visibleLeaves: [HTMLFile] {
         switch selectedTab {
         case .recent: return recentFiles
@@ -125,16 +148,45 @@ final class AppState {
         }
     }
 
-    /// j(down)/k(up)で選択を移動し即プレビュー。
-    /// 選択が可視列に無い(TREE で折りたたみ/タブ切替により隠れた)ときは、全 leaf 順序を
-    /// 基準に同方向の最近可視 leaf へ移し、先頭ジャンプを防ぐ。
-    /// 可視列が空(全 dir 折りたたみ等)で nil が返る場合は現選択を維持し、プレビューを消さない(M7 review #1)。
+    /// TREE タブの可視行列(dir + leaf。#32 の方向キー/Enter で扱う列)。
+    private var visibleRows: [TreeRow] {
+        TreeBuilder.visibleRows(tree, expanded: expandedDirs)
+    }
+
+    /// 方向キー/j/k で選択を移動。RECENT は leaf のみ(従来通り fullOrder 補正で「隠れた選択」救済)、
+    /// TREE は **dir も含めた行列**(#32)で移動する。可視列が空のときは現選択を維持(プレビューを消さない)。
     func moveSelection(_ direction: SelectionDirection) {
-        let fullOrder: [HTMLFile] = selectedTab == .tree ? TreeBuilder.allLeaves(tree) : recentFiles
-        if let next = SelectionLogic.next(
-            after: selectedFile, in: visibleLeaves, fullOrder: fullOrder, direction: direction
-        ) {
-            selectedFile = next
+        switch selectedTab {
+        case .recent:
+            if let next = SelectionLogic.next(
+                after: selectedFile, in: recentFiles, fullOrder: recentFiles, direction: direction
+            ) {
+                selectedFile = next
+            }
+        case .tree:
+            if let next = SelectionLogic.nextRow(
+                after: selection, in: visibleRows, direction: direction
+            ) {
+                selection = next
+            }
+        }
+    }
+
+    /// Enter キー: TREE で dir が選択されていれば展開トグル(`activate`)。file 選択 / RECENT は no-op。
+    /// 展開後、続けて方向キーで dir 配下のファイルが順に選択できる(#32)。
+    func activateSelection() {
+        guard case .dir(let id) = selection else { return }
+        setExpanded(id, !isExpanded(id))
+    }
+
+    /// `TreeRow` と `SidebarSelection` の同一判定(reconcile 前の可視列 membership 検査用)。
+    /// SelectionLogic に同等の private がある(行版 reconcile の内側用)が、AppState からの
+    /// membership 判定は限定用途なのでここに局在化する。
+    private func rowMatches(_ row: TreeRow, _ selection: SidebarSelection) -> Bool {
+        switch (row, selection) {
+        case (.file(let f), .file(let g)): return f.id == g.id
+        case (.dir(let i, _), .dir(let j)): return i == j
+        default: return false
         }
     }
 
@@ -399,12 +451,28 @@ final class AppState {
             recomputeTreeExpansion()
             // 検索中に rename 等で選択が filter から外れたら可視列へ reconcile し、
             // 「ファイルは存在するが検索結果に不可視」状態を解消する(M7 review #6)。
-            // ただし EXTERNAL ピンは TREE の visibleLeaves に出ないため、reconcile で内部ファイルに
+            // ただし EXTERNAL ピンは visibleLeaves に出ないため、reconcile で内部ファイルに
             // すり替わり外部プレビューが消えるのを防ぐ(searchText.didSet と同じガード — round-5 #2)。
-            if !searchText.isEmpty, let sel = selectedFile, !sel.isExternal,
-                !visibleLeaves.contains(where: { $0.id == sel.id }) {
-                selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
-                recomputeTreeExpansion()
+            // TREE タブは dir 選択も拾えるよう行版 reconcile を使う(#32)。
+            if !searchText.isEmpty {
+                if case .file(let f) = selection, f.isExternal {
+                    // EXTERNAL ピン保持
+                } else {
+                    switch selectedTab {
+                    case .recent:
+                        if let sel = selectedFile,
+                           !visibleLeaves.contains(where: { $0.id == sel.id }) {
+                            selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+                            recomputeTreeExpansion()
+                        }
+                    case .tree:
+                        if let sel = selection,
+                           !visibleRows.contains(where: { rowMatches($0, sel) }) {
+                            selection = SelectionLogic.reconcile(previous: selection, in: visibleRows)
+                            recomputeTreeExpansion()
+                        }
+                    }
+                }
             }
         }
     }

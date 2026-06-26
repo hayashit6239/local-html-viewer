@@ -31,7 +31,7 @@ struct HTMLViewerApp: App {
 }
 
 /// ビューアキーの local key monitor を設置する。テキスト入力中(検索フィールド / プレビュー
-/// WKWebView 内の `<input>`・`<textarea>`)は j/k/r/`/` を飲み込まずキー入力へ透過する。
+/// WKWebView 内の `<input>`・`<textarea>`)は j/k/r/`/`/↑↓/Return を飲み込まずキー入力へ透過する。
 /// (`.onKeyPress` はフォーカス取りこぼしがあるため monitor で受ける)。
 @MainActor
 private func installKeyMonitor(_ app: AppState) -> Any? {
@@ -44,6 +44,18 @@ private func installKeyMonitor(_ app: AppState) -> Any? {
         let cmd = flags.contains(.command)
         let shift = flags.contains(.shift)
         let optOrCtrl = flags.contains(.option) || flags.contains(.control)  // ⌥r='®' / ⌃r 等は横取りしない
+
+        // 矢印キー / Return / Enter は `charactersIgnoringModifiers` が非 ASCII 制御文字を返すため
+        // `keyCode` で判定する(#32)。j/k / ↑↓ は等価、Return / Enter(numpad)は activate(dir 展開)。
+        if !cmd && !optOrCtrl {
+            switch event.keyCode {
+            case 125: app.moveSelection(.down); return nil  // ↓
+            case 126: app.moveSelection(.up);   return nil  // ↑
+            case 36, 76: app.activateSelection(); return nil  // Return / Enter
+            default: break
+            }
+        }
+
         // Caps Lock 有効時 charactersIgnoringModifiers は 'r' を 'R' に変えるため、小文字へ正規化して
         // から判定する。reload と reveal は文字でなく修飾(cmd&&shift か否か)で振り分ける(M7 review #3)。
         // Shift+/ は '?' を返し "/" に一致しないため横取りされない('r' と対称)。

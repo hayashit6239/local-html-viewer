@@ -6,6 +6,10 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(AppState.self) private var app
     @FocusState private var searchFocused: Bool
+    /// List(サイドバー)のフォーカス。WKWebView(プレビュー)が key first responder を握ったままだと
+    /// クリック・矢印キーで selection が変わらない macOS 挙動を救う(#32)。クリックで奪取し、
+    /// 検索 / WebView へのフォーカス遷移時には自然に外れる。
+    @FocusState private var listFocused: Bool
 
     var body: some View {
         @Bindable var app = app
@@ -67,29 +71,36 @@ struct SidebarView: View {
             .padding(.horizontal, 12).padding(.bottom, 6)
 
             // ── リスト(タブ別)──
+            // List(selection:) は SidebarSelection? を受ける(#32: file/dir を同列に選択可能)。
+            // クリックで `listFocused = true` を立て、WKWebView から first responder を奪う。
             if app.selectedTab == .recent {
-                List(selection: $app.selectedFile) {
+                List(selection: $app.selection) {
                     ForEach(app.recentFiles) { file in
                         FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
-                            .tag(Optional(file))
+                            .tag(Optional(SidebarSelection.file(file)))
                             .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                             .listRowBackground(Color.clear)
                     }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .focused($listFocused)
+                .onTapGesture { listFocused = true }
             } else {
-                // dir 行(DisclosureGroup ラベル・tag 無し)クリックで List(selection:) が nil を
-                // 書き込み selectedFile を失う macOS 挙動を防ぐため、nil 書込を無視する Binding を使う
-                // (プログラム側の nil 化は AppState 直書きなので影響なし — M7 review #5)。
+                // dir 行(DisclosureGroup ラベル)クリックで List(selection:) が nil を書き込んで
+                // 選択を失う macOS 挙動を防ぐため、nil 書込を無視する Binding を使う(M7 review #5)。
+                // ただし dir 行自体に SidebarSelection.dir tag を付与した今(#32)、ユーザーが dir 行を
+                // 明示クリックすれば setter には `.dir(...)` が入り、無視されず正しく書き込まれる。
                 List(selection: Binding(
-                    get: { app.selectedFile },
-                    set: { if let v = $0 { app.selectedFile = v } }
+                    get: { app.selection },
+                    set: { if let v = $0 { app.selection = v } }
                 )) {
                     TreeRowsView(nodes: app.tree)
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .focused($listFocused)
+                .onTapGesture { listFocused = true }
             }
 
             // ── フッタ ──
@@ -208,21 +219,29 @@ private struct TreeRowsView: View {
         ForEach(nodes) { node in
             if let file = node.file {
                 FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
-                    .tag(Optional(file))
+                    .tag(Optional(SidebarSelection.file(file)))
                     .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                     .listRowBackground(Color.clear)
             } else {
+                // dir 行にも tag を付け、クリックで `.dir(id)` 選択になるようにする(#32)。
+                // DisclosureGroup の chevron(disclosure indicator)クリックは従来通り個別開閉が走る。
                 DisclosureGroup(isExpanded: expansion(of: node.id)) {
                     TreeRowsView(nodes: node.children ?? [])
                 } label: {
                     Text(node.name)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.textDim)
+                        .foregroundStyle(isDirSelected(node.id) ? Theme.amber : Theme.textDim)
                 }
+                .tag(Optional(SidebarSelection.dir(id: node.id)))
                 .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                 .listRowBackground(Color.clear)
             }
         }
+    }
+
+    private func isDirSelected(_ id: String) -> Bool {
+        if case .dir(let i) = app.selection { return i == id }
+        return false
     }
 
     /// `DisclosureGroup` の双方向バインディング(get=展開中か / set=ユーザートグル)。
