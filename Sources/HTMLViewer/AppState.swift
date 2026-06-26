@@ -455,7 +455,9 @@ final class AppState {
             // **全ファイル(result.files)由来のツリー**で intersection する。検索フィルタ後の `tree` で
             // 行うと、検索中に rescan が走ったとき一時的に隠れている dir が evict され、検索クリア後に
             // 折りたたみ意図が失われる(round-5 #1)。
-            userCollapsedDirs.formIntersection(TreeBuilder.allDirIDs(TreeBuilder.build(result.files)))
+            // 上の stale 判定で構築した `newNodes` を再利用(同 `result.files` から同ツリーが
+            // 出るため二重ビルドを避ける — #33 round-3)。
+            userCollapsedDirs.formIntersection(TreeBuilder.allDirIDs(newNodes))
             // 走査でツリー構造が変わったので展開を取り直す(既定ポリシー + 選択の親 dir 自動展開)。
             recomputeTreeExpansion()
             // 検索中に rename 等で選択が filter から外れたら可視列へ reconcile し、
