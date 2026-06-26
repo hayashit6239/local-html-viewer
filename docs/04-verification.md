@@ -117,8 +117,12 @@
 | 9 | 既定展開ポリシー | dir 総数 ≤ 40 / > 40 のフォルダで TREE 起動 | ≤40 は全展開・>40 は第一階層のみ展開 | ⬜(GUI 目視) |
 | 10 | 親 dir 自動展開 | 折りたたみ dir 内の leaf を検索/選択で指す | 親 dir が自動展開され選択が可視化 | ⬜(GUI 目視) |
 | 11 | 折りたたみ中の j/k | dir を折りたたんで j/k 移動 | 折りたたみ dir 配下の leaf は飛ばす(可視 leaf のみ移動) | ⬜(GUI 目視) |
+| 12 | 方向キー(↑↓) | リストで `↑` `↓` | j/k と等価に動く(RECENT は leaf、TREE は dir/leaf 行ベース) | ✅ 2026-06-26(#32 実機確認) |
+| 13 | クリック選択 | サイドバー行をマウスでクリック | RECENT/TREE どちらも即選択・プレビュー追従(file 選択時)。クリック後の方向キー/j/k も効く | ✅ 2026-06-26(#32 実機確認) |
+| 14 | dir 展開 → ファイル選択 | TREE で dir 行を選択 → `Return` → さらに方向キー | dir 展開トグル → 配下の leaf を順に選択できる | ✅ 2026-06-26(#32 実機確認) |
+| 15 | Return/Enter の no-op | RECENT で Return / TREE で file 選択中に Return | no-op(プレビュー切替も発火しない) | ✅ 2026-06-26(#32 実機確認) |
 
-> 注: Core(`TreeBuilder`/`SearchProvider`/`SelectionLogic`、展開合成 `expansionSet` 含む)は `make test` で閉じる。キーモニタ・@FocusState・DisclosureGroup 展開 UX の体感は GUI 手動。展開ポリシー(>40 第一階層のみ / 親 dir 自動展開 / 検索ヒット展開)は M7 brush-up(2026-06-24)で UI 配線済み(Core `expansionSet` + 再帰 `DisclosureGroup`)。
+> 注: Core(`TreeBuilder`/`SearchProvider`/`SelectionLogic`、展開合成 `expansionSet` / 行版 `visibleRows`・`nextRow`・`reconcile` 含む)は `make test` で閉じる。キーモニタ・@FocusState・DisclosureGroup 展開 UX の体感は GUI 手動。展開ポリシー(>40 第一階層のみ / 親 dir 自動展開 / 検索ヒット展開)は M7 brush-up(2026-06-24)で UI 配線済み。**#12〜#15 は #32(sidebar-keynav)で追加された ↑↓/Return/クリック/dir→file 経路の検証**。
 
 ### M8: Claude Code hook(open-html.sh + settings example)
 

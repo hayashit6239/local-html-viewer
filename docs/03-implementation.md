@@ -221,4 +221,15 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - #4: `build-icon.sh` の BASE 検証を **pixelHeight も**に拡張。非正方 viewBox の SVG で width=1024 / height≠1024 の letterbox アイコンが iconutil を通るのを防ぐ
   - #5: visual asset 変更時の **`CFBundleVersion` +1 ポリシーを明文化**(`build-icon.sh` 末尾のリマインダ + 本節)。自動 bump は no-op 再生成でも version を膨らませるため採らず、リマインダに留める。LS icon cache(bundle id + version)無効化のため**アイコン/SVG を変えたら CFBundleVersion を +1 する**(docs/04 §5 M9 #3 の killall フォールバックと併用)
 
+### sidebar-keynav(#32 / 2026-06-26)
+
+M7 の積み残し(↑↓ / Return / マウスクリック / dir 選択経路)を回収する付随 feature。M7 で実装した j/k はファイル間移動のみで、深い階層の TREE を実用的に辿れる状態ではなかった(docs/04 §5 M7 #12〜#15 が ⬜ のまま残存)。設計判断は `05-decisions.md` D10。
+
+- **Core 拡張**: `Sources/HTMLViewerCore/Models.swift` に `enum SidebarSelection { case file(HTMLFile); case dir(id: String) }` と `enum TreeRow { case file(HTMLFile); case dir(id: String, depth: Int) }`(いずれも `Hashable, Sendable`)。`TreeBuilder.visibleRows(_:expanded:)` を追加(`visibleLeaves` の dir + file 行版・depth 付き)。`SelectionLogic.nextRow(after:in:direction:)` / `reconcile(previous:in:)`(行版)を追加(端クランプ・可視外フォールバック・残存維持セマンティクスは leaf 版と一致)。**新規テスト 10 件**(`TreeBuilder` 5 / `SelectionLogic` 5)、計 94 green
+- **AppState 拡張**: 内部状態を `selection: SidebarSelection?` に変更し、`selectedFile: HTMLFile?` を **computed property**(`.file` 抽出)に降格。`moveSelection(_:)` は RECENT で従来の leaf 版 `next`、TREE で行版 `nextRow` に分岐。`activateSelection()` を追加(dir 選択時のみ `toggleExpansion`、file 選択 / RECENT は no-op)。`searchText.didSet` と `rescan` の reconcile も tab-aware に行版/leaf 版を切替(TREE タブで dir 選択も保持)。EXTERNAL ピンガードは `if case .file(let f) = selection, f.isExternal` で維持
+- **UI**: `HTMLViewerApp.installKeyMonitor` に **`keyCode` ベース判定**で `↑(126)/↓(125)/Return(36)/Enter(76)` を追加(`charactersIgnoringModifiers` は矢印/Return で非 ASCII 制御文字を返すため文字判定不可)。`SidebarView` の `List(selection:)` Binding を `SidebarSelection?` 化、`TreeRowsView` の dir 行にも `.tag(Optional(SidebarSelection.dir(id: node.id)))` を付与し(クリックで `.dir` 選択になる)、選択中 dir 行は label 色を amber 強調。List コンテナに `@FocusState var listFocused` + `.focused()` + `.onTapGesture { listFocused = true }` を当て、**WKWebView から first responder を奪う**経路を作る(プレビュー WKWebView が key first responder を握ったままだとクリック・矢印キーで selection が変わらない macOS 挙動への対処)
+- **dir 選択中のプレビュー挙動**: `selectedFile` getter が `.file` のみを返すため、dir 選択中は **直前のファイルプレビューが維持される**(切替ちらつき回避)。setter 経由の代入(`handleOpenedURLs` / `rescan` の `selectedFile = X`)は `selection = .file(X)` へ橋渡しされ、後方互換が保たれる
+- **docs/04 §5 M7**: ↑↓ / クリック / dir 展開→ファイル選択 / Return no-op の検証行を #12〜#15 に追加(GUI 手動、`make install` 後のバンドル版で実施)
+- スコープ外(意図的): Tab / Space / Right / Left のような Finder 標準キー、複数選択(Cmd/Shift-クリック)、マウスホイール選択移動、dir 選択時の「dir 配下の README 自動表示」(YAGNI)
+
 (M10 以降、完了時に追記)
