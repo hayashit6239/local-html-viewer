@@ -113,6 +113,33 @@ public enum TreeBuilder {
         return out
     }
 
+    /// 展開状態に応じた可視行列(dir + leaf)。`#32` の方向キー移動・Enter 展開のために
+    /// dir 行も同列に扱う。dir は折りたたみ中でも**自分自身は可視**(配下のみ非表示)で、
+    /// これが「dir を選んで Enter で展開する」操作経路を成立させる。`depth` はルート dir=0。
+    public static func visibleRows(_ nodes: [TreeNode], expanded: Set<String>) -> [TreeRow] {
+        var out: [TreeRow] = []
+        walk(nodes, depth: 0, expanded: expanded, into: &out)
+        return out
+    }
+
+    private static func walk(
+        _ nodes: [TreeNode],
+        depth: Int,
+        expanded: Set<String>,
+        into out: inout [TreeRow]
+    ) {
+        for node in nodes {
+            if let file = node.file {
+                out.append(.file(file))
+            } else {
+                out.append(.dir(id: node.id, depth: depth))
+                if let children = node.children, expanded.contains(node.id) {
+                    walk(children, depth: depth + 1, expanded: expanded, into: &out)
+                }
+            }
+        }
+    }
+
     // MARK: - helpers
 
     /// ツリー内の全 dir ノード id(`userCollapsedDirs` の prune 等で使う)。

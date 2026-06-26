@@ -76,4 +76,94 @@ struct SelectionLogicTests {
             SelectionLogic.next(after: external, in: visible, fullOrder: full, direction: .up)?.name
                 == "b")
     }
+
+    // MARK: - nextRow / reconcile(行版・#32)
+    // テストリスト:
+    // [x] 空 visible は nil
+    // [x] 未選択 + down は最初の行、up は最後の行
+    // [x] dir → file → dir の混在で down/up が順に隣へ
+    // [x] 端クランプ(回り込みなし)
+    // [x] 選択が visible に無い場合は端から開始(行版は単純化、fullOrder は持たない)
+    // [x] reconcile(行版): 残存(file/dir)維持・消えたら先頭・空 nil・nil → 先頭
+
+    private func rowsExample() -> [TreeRow] {
+        // 模式図: [dir "/R/", dir "/R/sub/", file b, file a]
+        [
+            .dir(id: "/R/", depth: 0),
+            .dir(id: "/R/sub/", depth: 1),
+            .file(f("b")),
+            .file(f("a")),
+        ]
+    }
+
+    @Test("nextRow: 空 visible は nil")
+    func nextRowEmpty() {
+        #expect(SelectionLogic.nextRow(after: nil, in: [], direction: .down) == nil)
+        #expect(SelectionLogic.nextRow(after: .file(f("a")), in: [], direction: .up) == nil)
+    }
+
+    @Test("nextRow: 未選択は端から開始(down=先頭、up=末尾)")
+    func nextRowFromNil() {
+        let rows = rowsExample()
+        #expect(SelectionLogic.nextRow(after: nil, in: rows, direction: .down) == .dir(id: "/R/"))
+        #expect(SelectionLogic.nextRow(after: nil, in: rows, direction: .up) == .file(f("a")))
+    }
+
+    @Test("nextRow: dir/file 混在で隣へ、端クランプ")
+    func nextRowMixedClamp() {
+        let rows = rowsExample()
+        // dir "/R/" → 次は dir "/R/sub/"
+        #expect(
+            SelectionLogic.nextRow(after: .dir(id: "/R/"), in: rows, direction: .down)
+                == .dir(id: "/R/sub/"))
+        // dir "/R/sub/" → 次は file b
+        #expect(
+            SelectionLogic.nextRow(after: .dir(id: "/R/sub/"), in: rows, direction: .down)
+                == .file(f("b")))
+        // file b → up は dir "/R/sub/"
+        #expect(
+            SelectionLogic.nextRow(after: .file(f("b")), in: rows, direction: .up)
+                == .dir(id: "/R/sub/"))
+        // 末尾 file a で down → クランプ(同位置)
+        #expect(
+            SelectionLogic.nextRow(after: .file(f("a")), in: rows, direction: .down)
+                == .file(f("a")))
+        // 先頭 dir "/R/" で up → クランプ
+        #expect(
+            SelectionLogic.nextRow(after: .dir(id: "/R/"), in: rows, direction: .up)
+                == .dir(id: "/R/"))
+    }
+
+    @Test("nextRow: visible に無い選択(折りたたみ等で消えた dir)は端から開始")
+    func nextRowMissing() {
+        let rows = rowsExample()
+        let ghost: SidebarSelection = .dir(id: "/R/sub/gone/")
+        #expect(
+            SelectionLogic.nextRow(after: ghost, in: rows, direction: .down) == .dir(id: "/R/"))
+        #expect(
+            SelectionLogic.nextRow(after: ghost, in: rows, direction: .up) == .file(f("a")))
+    }
+
+    @Test("reconcile(行版): 残存(file/dir)維持・消えたら先頭・空 nil・nil → 先頭")
+    func reconcileRow() {
+        let rows = rowsExample()
+        // file 維持
+        #expect(
+            SelectionLogic.reconcile(previous: .file(f("b")), in: rows) == .file(f("b")))
+        // dir 維持
+        #expect(
+            SelectionLogic.reconcile(previous: .dir(id: "/R/sub/"), in: rows)
+                == .dir(id: "/R/sub/"))
+        // 消えた file → 先頭(= 最初の dir 行)
+        #expect(
+            SelectionLogic.reconcile(previous: .file(f("z")), in: rows) == .dir(id: "/R/"))
+        // 消えた dir → 先頭
+        #expect(
+            SelectionLogic.reconcile(previous: .dir(id: "/missing/"), in: rows)
+                == .dir(id: "/R/"))
+        // 空 → nil
+        #expect(SelectionLogic.reconcile(previous: .file(f("a")), in: []) == nil)
+        // nil → 先頭
+        #expect(SelectionLogic.reconcile(previous: nil, in: rows) == .dir(id: "/R/"))
+    }
 }

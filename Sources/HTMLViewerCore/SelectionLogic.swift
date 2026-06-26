@@ -58,4 +58,53 @@ public enum SelectionLogic {
         }
         return next(after: nil, in: visible, direction: direction)  // 同方向に可視 leaf 無し → 端
     }
+
+    // MARK: - 行ベース(#32: SidebarSelection / TreeRow)
+
+    /// 可視行列(dir + file の混在)に対する↑↓選択。端はクランプ。未選択時は端から
+    /// (down=先頭、up=末尾)。`current` が可視行に無い(折りたたみで dir が消えた等)
+    /// 場合も同様に端から開始する。leaf 版の `fullOrder` 補正は行版では持たない:
+    /// dir/file の混在順序を一意に決める「全行順」が `visibleRows(expanded=全 dir)` 以外に
+    /// 存在せず、利用側(M7 で隠れた選択を救う狙い)に対するゲインも小さいため、最小化する。
+    public static func nextRow(
+        after current: SidebarSelection?,
+        in visible: [TreeRow],
+        direction: SelectionDirection
+    ) -> SidebarSelection? {
+        guard !visible.isEmpty else { return nil }
+        guard let current, let idx = visible.firstIndex(where: { matches($0, current) }) else {
+            return direction == .down ? selection(of: visible.first!) : selection(of: visible.last!)
+        }
+        let target = direction == .down ? idx + 1 : idx - 1
+        guard visible.indices.contains(target) else { return current }  // クランプ
+        return selection(of: visible[target])
+    }
+
+    /// フィルタ/再走査後の行ベース選択保持: 残存(file 同 id / dir 同 id)維持、
+    /// 消えたら先頭行、空なら nil。leaf 版と同じセマンティクスで dir も扱う。
+    public static func reconcile(
+        previous: SidebarSelection?,
+        in visible: [TreeRow]
+    ) -> SidebarSelection? {
+        guard let previous else { return visible.first.map(selection(of:)) }
+        if let kept = visible.first(where: { matches($0, previous) }) {
+            return selection(of: kept)
+        }
+        return visible.first.map(selection(of:))
+    }
+
+    private static func selection(of row: TreeRow) -> SidebarSelection {
+        switch row {
+        case .file(let file): return .file(file)
+        case .dir(let id, _): return .dir(id: id)
+        }
+    }
+
+    private static func matches(_ row: TreeRow, _ selection: SidebarSelection) -> Bool {
+        switch (row, selection) {
+        case (.file(let f), .file(let g)): return f.id == g.id
+        case (.dir(let i, _), .dir(let j)): return i == j
+        default: return false
+        }
+    }
 }

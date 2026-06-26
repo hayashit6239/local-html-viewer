@@ -129,4 +129,80 @@ struct TreeBuilderTests {
         let set = TreeBuilder.expansionSet(for: tree, searching: true, selectedLeafPath: nil)
         #expect(set.isSuperset(of: ["/R/", "/R/deep/", "/R/deep/nested/"]))
     }
+
+    // MARK: - visibleRows(#32 行ベース可視列)
+    // テストリスト:
+    // [x] 空ツリーは空配列
+    // [x] 全展開で dir 行 + leaf 行が depth-first 順(visibleLeaves と一致する file 部分)
+    // [x] ルートのみ展開なら dir 配下の dir/leaf は不可視
+    // [x] depth はルート dir=0、子=1、…(UI 側のインデント用)
+    // [x] dir/leaf 同階層の並びは TreeNode の build と同じ(dir 先・leaf 後)
+
+    @Test("visibleRows: 空ツリーは空配列")
+    func visibleRowsEmpty() {
+        #expect(TreeBuilder.visibleRows([], expanded: []).isEmpty)
+    }
+
+    @Test("visibleRows: 全展開で dir/leaf を depth-first 順に平坦化(depth 付き)")
+    func visibleRowsFullyExpanded() {
+        let files = [f(root: "/R", rel: "a.html"), f(root: "/R", rel: "sub/b.html")]
+        let tree = TreeBuilder.build(files)
+        let rows = TreeBuilder.visibleRows(tree, expanded: ["/R/", "/R/sub/"])
+        // 期待: [dir "/R/" depth=0, dir "/R/sub/" depth=1, file b.html, file a.html]
+        // (build は dir 先・leaf 後、各々名前昇順)
+        guard rows.count == 4 else {
+            #expect(rows.count == 4); return
+        }
+        guard case .dir(let id0, let d0) = rows[0] else { #expect(Bool(false)); return }
+        #expect(id0 == "/R/" && d0 == 0)
+        guard case .dir(let id1, let d1) = rows[1] else { #expect(Bool(false)); return }
+        #expect(id1 == "/R/sub/" && d1 == 1)
+        guard case .file(let bFile) = rows[2] else { #expect(Bool(false)); return }
+        #expect(bFile.name == "b.html")
+        guard case .file(let aFile) = rows[3] else { #expect(Bool(false)); return }
+        #expect(aFile.name == "a.html")
+    }
+
+    @Test("visibleRows: ルートのみ展開で dir 配下は不可視(dir 自体は出る)")
+    func visibleRowsRootOnly() {
+        let files = [f(root: "/R", rel: "a.html"), f(root: "/R", rel: "sub/b.html")]
+        let tree = TreeBuilder.build(files)
+        let rows = TreeBuilder.visibleRows(tree, expanded: ["/R/"])
+        // 期待: [dir "/R/", dir "/R/sub/"(折りたたみ中で配下不可視), file a.html]
+        guard rows.count == 3 else { #expect(rows.count == 3); return }
+        guard case .dir(let id0, _) = rows[0] else { #expect(Bool(false)); return }
+        #expect(id0 == "/R/")
+        guard case .dir(let id1, let d1) = rows[1] else { #expect(Bool(false)); return }
+        #expect(id1 == "/R/sub/" && d1 == 1)  // dir 行は出るが子は出ない
+        guard case .file(let aFile) = rows[2] else { #expect(Bool(false)); return }
+        #expect(aFile.name == "a.html")
+    }
+
+    @Test("visibleRows: ルート未展開なら配下は dir も leaf も出ない")
+    func visibleRowsAllCollapsed() {
+        let files = [f(root: "/R", rel: "a.html"), f(root: "/R", rel: "sub/b.html")]
+        let tree = TreeBuilder.build(files)
+        let rows = TreeBuilder.visibleRows(tree, expanded: [])
+        // 期待: [dir "/R/"](ルート dir 自身は常に表示、配下は折りたたみで非表示)
+        #expect(rows.count == 1)
+        guard case .dir(let id0, let d0) = rows[0] else { #expect(Bool(false)); return }
+        #expect(id0 == "/R/" && d0 == 0)
+    }
+
+    @Test("visibleRows: visibleLeaves と file 部分が一致(後方互換確認)")
+    func visibleRowsFilesMatchVisibleLeaves() {
+        let files = [
+            f(root: "/R", rel: "a.html"),
+            f(root: "/R", rel: "sub/b.html"),
+            f(root: "/R", rel: "sub/c.html"),
+        ]
+        let tree = TreeBuilder.build(files)
+        let expanded: Set<String> = ["/R/", "/R/sub/"]
+        let rows = TreeBuilder.visibleRows(tree, expanded: expanded)
+        let leaves = TreeBuilder.visibleLeaves(tree, expanded: expanded)
+        let rowFiles = rows.compactMap { row -> HTMLFile? in
+            if case .file(let f) = row { return f } else { return nil }
+        }
+        #expect(rowFiles == leaves)
+    }
 }
