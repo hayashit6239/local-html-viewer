@@ -31,6 +31,11 @@ final class AppState {
     private(set) var pinnedExternal: HTMLFile?
     /// 読めない(canonicalPath nil 等)受信パス。サイドバーの「読めない」表示に使う。
     private(set) var unreadableExternalPath: String?
+    /// コールド起動で odoc が `rescan` 完了前に届き、内部 URL が `allFiles` に未反映だったときの
+    /// 退避先(#34 🔴)。`rescan` 完了側で `allFiles` から再引き当てし、解決できたら選択に昇格・
+    /// `pendingInternalSelectionPath` は nil クリア。**1 回限り**(次の rescan で flush)で、未解決
+    /// なら捨てる(MAX_FILES 打ち切り等の希少ケースは silent drop を許容 — 過剰実装を避ける)。
+    private var pendingInternalSelectionPath: String?
 
     // MARK: - M7: 検索 / タブ / キーボード
 
@@ -198,33 +203,52 @@ final class AppState {
         let fm = FileManager.default
         let rootsCanonical = folders.map { canonicalPath(of: $0.path) }
 
+        // .html/.htm かつ実在のパスに絞る判断は Core(`OpenEventPolicy`)に集約する(#34 🟡 1)。
+        // 同 Policy の 5 テストが本番経路を守る形にし、AppState 側で同じフィルタを inline 再実装する
+        // 状態(=テストが別実装を守るアンチパターン)を解消する。
+        let acceptablePaths = OpenEventPolicy.acceptableHTMLPaths(
+            from: urls,
+            fileExists: { fm.fileExists(atPath: $0) }
+        )
+        let acceptableSet = Set(acceptablePaths)
+
         var lastExternal: (path: String, mtime: Date)?
         var lastInternal: HTMLFile?
         var unreadable: String?
 
+        // .html 拡張は通るが Policy 不通過 = 「実在しない」or「canonicalPath 由来で path 不一致」。
+        // silent drop せず、ピン中なら落とし unreadable に記録(M5 🟡-2 の挙動を維持)。
         for url in urls where IgnoreRules.isHTMLFile(url.lastPathComponent) {
-            guard let cpath = try? url.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath else {
-                unreadable = url.path  // canonicalPath nil = 読めない(ピンしない)
-                continue
+            if acceptableSet.contains(url.path) { continue }
+            let cpath = (try? url.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath)
+                ?? url.path
+            if cpath == pinnedExternal?.path {
+                pinnedExternal = nil
+                if selectedFile?.path == cpath { selectedFile = nil }
             }
-            guard fm.fileExists(atPath: cpath) else {
-                // 削除 → ピン落とし & 選択クリア(ピン中なら)。
-                if cpath == pinnedExternal?.path {
-                    pinnedExternal = nil
-                    if selectedFile?.path == cpath { selectedFile = nil }
-                }
-                // ピン中でない死パスでも silent drop しない(🟡-2): 「読めない」表示で UI 無反応を回避。
-                unreadable = url.path
-                continue
-            }
+            unreadable = url.path
+        }
+
+        // Policy 通過 path を内外判定で振り分ける(canonical 正規化と内外判定はここで実施)。
+        // 内部判定だが `allFiles` に未反映(コールド起動の rescan 未完了)の場合は
+        // `pendingInternalSelectionPath` に退避し、`rescan` 完了側で再引き当てる(#34 🔴)。
+        var pendingInternal: String?
+        for path in acceptablePaths {
+            let url = URL(fileURLWithPath: path)
+            let cpath = (try? url.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath) ?? path
             if ExternalOpenPolicy.isInside(cpath, registeredRoots: rootsCanonical) {
-                if let match = allFiles.first(where: { $0.path == cpath }) { lastInternal = match }
+                if let match = allFiles.first(where: { $0.path == cpath }) {
+                    lastInternal = match
+                } else {
+                    pendingInternal = cpath  // 後勝ち: 複数受信のとき最後の内部 URL を退避
+                }
             } else {
                 let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey])
                     .contentModificationDate) ?? Date()
                 lastExternal = (cpath, mtime)
             }
         }
+        if let p = pendingInternal { pendingInternalSelectionPath = p }
 
         if let ext = lastExternal {
             if ext.path != pinnedExternal?.path {
@@ -246,8 +270,8 @@ final class AppState {
         } else if lastExternal != nil {
             selectedFile = pinnedExternal  // 内部が無ければ外部ピンを選択
         }
-        if lastExternal == nil, lastInternal == nil, let u = unreadable {
-            unreadableExternalPath = u  // 読めない受信のみ
+        if lastExternal == nil, lastInternal == nil, pendingInternal == nil, let u = unreadable {
+            unreadableExternalPath = u  // 読めない受信のみ(pending 退避中なら unreadable に流さない — #34 🔴)
         }
     }
 
@@ -366,6 +390,17 @@ final class AppState {
             guard generation == scanGeneration else { return }
             allFiles = result.files
             scanTruncated = result.truncated
+
+            // コールド起動 race(#34 🔴): odoc が `rescan` 完了前に届き内部 URL が `allFiles` に
+            // 未反映だった場合の退避 path を、ここで再引き当て → 選択に昇格。1 回限りで flush。
+            // 未解決(MAX_FILES 打ち切り等)は捨てる(unreadable には流さない: 元々内部 URL のため)。
+            if let pending = pendingInternalSelectionPath {
+                if let match = result.files.first(where: { $0.path == pending }) {
+                    selectedFile = match
+                    unreadableExternalPath = nil
+                }
+                pendingInternalSelectionPath = nil
+            }
 
             // EXTERNAL ピンが新規登録フォルダ等で「内部化」されたら、ピンを落として
             // 内部版に張り替える(declarative 二重解消の一貫性を確保 — 🟡-1):
