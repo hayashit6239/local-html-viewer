@@ -100,7 +100,10 @@ public enum SelectionLogic {
         }
     }
 
-    private static func matches(_ row: TreeRow, _ selection: SidebarSelection) -> Bool {
+    /// `TreeRow` と `SidebarSelection` の同一判定。可視列 membership 検査(reconcile / nextRow /
+    /// AppState 側の rescan 後 reconcile 等)で共通に使うため public。`SidebarSelection` に case を
+    /// 追加したときに分岐の同期漏れを発生させないよう、判定ロジックは本関数 1 箇所に集約する。
+    public static func matches(_ row: TreeRow, _ selection: SidebarSelection) -> Bool {
         switch (row, selection) {
         case (.file(let f), .file(let g)): return f.id == g.id
         case (.dir(let i, _), .dir(let j)): return i == j

@@ -166,4 +166,18 @@ struct SelectionLogicTests {
         // nil → 先頭
         #expect(SelectionLogic.reconcile(previous: nil, in: rows) == .dir(id: "/R/"))
     }
+
+    @Test("matches(public): file ↔ file は id 一致、dir ↔ dir は id 一致、case 違いは false")
+    func matchesPublic() {
+        let fa = f("a")
+        // 同 case 一致
+        #expect(SelectionLogic.matches(.file(fa), .file(fa)))
+        #expect(SelectionLogic.matches(.dir(id: "/R/", depth: 0), .dir(id: "/R/")))
+        // 同 case 不一致
+        #expect(!SelectionLogic.matches(.file(fa), .file(f("b"))))
+        #expect(!SelectionLogic.matches(.dir(id: "/R/", depth: 0), .dir(id: "/Q/")))
+        // case 違い(file ↔ dir / dir ↔ file)は常に false
+        #expect(!SelectionLogic.matches(.file(fa), .dir(id: "/R/")))
+        #expect(!SelectionLogic.matches(.dir(id: "/R/", depth: 0), .file(fa)))
+    }
 }

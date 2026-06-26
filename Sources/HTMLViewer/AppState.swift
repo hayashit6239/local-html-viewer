@@ -179,17 +179,6 @@ final class AppState {
         setExpanded(id, !isExpanded(id))
     }
 
-    /// `TreeRow` と `SidebarSelection` の同一判定(reconcile 前の可視列 membership 検査用)。
-    /// SelectionLogic に同等の private がある(行版 reconcile の内側用)が、AppState からの
-    /// membership 判定は限定用途なのでここに局在化する。
-    private func rowMatches(_ row: TreeRow, _ selection: SidebarSelection) -> Bool {
-        switch (row, selection) {
-        case (.file(let f), .file(let g)): return f.id == g.id
-        case (.dir(let i, _), .dir(let j)): return i == j
-        default: return false
-        }
-    }
-
     /// 選択中ファイルを Finder で表示(未選択なら no-op)。
     func revealSelectedInFinder() {
         guard let file = selectedFile else { return }
@@ -437,7 +426,10 @@ final class AppState {
                 !result.files.contains(where: { $0.path == sel.path }) {
                 selectedFile = nil
             }
-            if selectedFile == nil {
+            // 未選択時のみ最新ファイルを補充する。`selectedFile` getter は `.dir` 選択中も nil を
+            // 返すため、ここを `selectedFile == nil` で見ると dir 選択を上書きしてしまう。`selection`
+            // で判定して .dir 選択を保持する(設計コメント L33-34 参照 — PR #33 review #1)。
+            if selection == nil {
                 selectedFile = recentFiles.first
             }
             // 削除/再走査で消えた dir id を userCollapsedDirs から除去する。蓄積メモリリークを防ぎ、
@@ -467,7 +459,7 @@ final class AppState {
                         }
                     case .tree:
                         if let sel = selection,
-                           !visibleRows.contains(where: { rowMatches($0, sel) }) {
+                           !visibleRows.contains(where: { SelectionLogic.matches($0, sel) }) {
                             selection = SelectionLogic.reconcile(previous: selection, in: visibleRows)
                             recomputeTreeExpansion()
                         }
