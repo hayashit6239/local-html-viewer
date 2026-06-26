@@ -44,10 +44,17 @@ struct WebViewContainer: NSViewRepresentable {
             lastReloadToken = reloadToken
 
             if isReload {
-                // リロード前に現在のスクロール位置を退避(JS は非同期なので退避完了後にロード)
+                // リロード前に現在のスクロール位置を退避(JS は非同期なので退避完了後にロード)。
+                // JS 評価中(数十 ms)に別ファイルへの切替が来ると、後続 `load` が `lastLoadedPath`/
+                // `lastReloadToken` を更新する → ここで closure が走って **古い file を上書き**しうる。
+                // closure 入口で同一性を再確認し、不一致ならスクロール退避ごと捨てる(#34 🟡 2)。
                 webView.evaluateJavaScript("[window.scrollX, window.scrollY]") { [weak self] result, _ in
-                    if let a = result as? [Double], a.count == 2 { self?.pendingScroll = (a[0], a[1]) }
-                    self?.performLoad(file, into: webView)
+                    guard let self,
+                          self.lastLoadedPath == file.path,
+                          self.lastReloadToken == reloadToken
+                    else { return }
+                    if let a = result as? [Double], a.count == 2 { self.pendingScroll = (a[0], a[1]) }
+                    self.performLoad(file, into: webView)
                 }
             } else {
                 pendingScroll = nil  // ファイル切替は復元しない
