@@ -88,8 +88,27 @@ public enum TreeBuilder {
     /// leaf を可視化するために展開すべき祖先 dir の id 集合(ルートまで再帰)。
     public static func ancestors(ofLeaf leafPath: String, in nodes: [TreeNode]) -> Set<String> {
         var result = Set<String>()
-        _ = findPath(leafPath, in: nodes, accumulated: [], into: &result)
+        _ = findLeafPath(leafPath, in: nodes, accumulated: [], into: &result)
         return result
+    }
+
+    /// dir 自身を可視化するために展開すべき祖先 dir の id 集合(自身は含まない・ルートまで再帰)。
+    /// `.dir` 選択を見せる際の祖先保護(`recomputeTreeExpansion`)で使う(#33 round-2 #2)。
+    public static func ancestors(ofDir dirID: String, in nodes: [TreeNode]) -> Set<String> {
+        var result = Set<String>()
+        _ = findDirPath(dirID, in: nodes, accumulated: [], into: &result)
+        return result
+    }
+
+    /// 指定 dir id が現ツリーに存在するか(`.dir` 選択の stale 検出に使う — #33 round-2 #1)。
+    public static func containsDir(_ dirID: String, in nodes: [TreeNode]) -> Bool {
+        for node in nodes {
+            if !node.isLeaf {
+                if node.id == dirID { return true }
+                if let children = node.children, containsDir(dirID, in: children) { return true }
+            }
+        }
+        return false
     }
 
     /// 全 leaf を visit 順に平坦化(OutlineGroup が全展開で描画する TREE の j/k 用)。
@@ -113,6 +132,33 @@ public enum TreeBuilder {
         return out
     }
 
+    /// 展開状態に応じた可視行列(dir + leaf)。`#32` の方向キー移動・Enter 展開のために
+    /// dir 行も同列に扱う。dir は折りたたみ中でも**自分自身は可視**(配下のみ非表示)で、
+    /// これが「dir を選んで Enter で展開する」操作経路を成立させる。`depth` はルート dir=0。
+    public static func visibleRows(_ nodes: [TreeNode], expanded: Set<String>) -> [TreeRow] {
+        var out: [TreeRow] = []
+        walk(nodes, depth: 0, expanded: expanded, into: &out)
+        return out
+    }
+
+    private static func walk(
+        _ nodes: [TreeNode],
+        depth: Int,
+        expanded: Set<String>,
+        into out: inout [TreeRow]
+    ) {
+        for node in nodes {
+            if let file = node.file {
+                out.append(.file(file))
+            } else {
+                out.append(.dir(id: node.id, depth: depth))
+                if let children = node.children, expanded.contains(node.id) {
+                    walk(children, depth: depth + 1, expanded: expanded, into: &out)
+                }
+            }
+        }
+    }
+
     // MARK: - helpers
 
     /// ツリー内の全 dir ノード id(`userCollapsedDirs` の prune 等で使う)。
@@ -126,7 +172,7 @@ public enum TreeBuilder {
     }
 
     @discardableResult
-    private static func findPath(
+    private static func findLeafPath(
         _ leafPath: String,
         in nodes: [TreeNode],
         accumulated: [String],
@@ -136,9 +182,26 @@ public enum TreeBuilder {
             if node.isLeaf {
                 if node.id == leafPath { result.formUnion(accumulated); return true }
             } else if let children = node.children {
-                if findPath(leafPath, in: children, accumulated: accumulated + [node.id], into: &result) {
+                if findLeafPath(leafPath, in: children, accumulated: accumulated + [node.id], into: &result) {
                     return true
                 }
+            }
+        }
+        return false
+    }
+
+    @discardableResult
+    private static func findDirPath(
+        _ dirID: String,
+        in nodes: [TreeNode],
+        accumulated: [String],
+        into result: inout Set<String>
+    ) -> Bool {
+        for node in nodes where !node.isLeaf {
+            if node.id == dirID { result.formUnion(accumulated); return true }
+            if let children = node.children,
+                findDirPath(dirID, in: children, accumulated: accumulated + [node.id], into: &result) {
+                return true
             }
         }
         return false

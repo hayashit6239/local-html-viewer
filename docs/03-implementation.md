@@ -221,4 +221,25 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
   - #4: `build-icon.sh` の BASE 検証を **pixelHeight も**に拡張。非正方 viewBox の SVG で width=1024 / height≠1024 の letterbox アイコンが iconutil を通るのを防ぐ
   - #5: visual asset 変更時の **`CFBundleVersion` +1 ポリシーを明文化**(`build-icon.sh` 末尾のリマインダ + 本節)。自動 bump は no-op 再生成でも version を膨らませるため採らず、リマインダに留める。LS icon cache(bundle id + version)無効化のため**アイコン/SVG を変えたら CFBundleVersion を +1 する**(docs/04 §5 M9 #3 の killall フォールバックと併用)
 
+### sidebar-keynav(#32 / 2026-06-26)
+
+M7 の積み残し(↑↓ / Return / マウスクリック / dir 選択経路)を回収する付随 feature。M7 で実装した j/k はファイル間移動のみで、深い階層の TREE を実用的に辿れる状態ではなかった(docs/04 §5 M7 #12〜#15 が ⬜ のまま残存)。設計判断は `05-decisions.md` D10。
+
+- **Core 拡張**: `Sources/HTMLViewerCore/Models.swift` に `enum SidebarSelection { case file(HTMLFile); case dir(id: String) }` と `enum TreeRow { case file(HTMLFile); case dir(id: String, depth: Int) }`(いずれも `Hashable, Sendable`)。`TreeBuilder.visibleRows(_:expanded:)` を追加(`visibleLeaves` の dir + file 行版・depth 付き)。`SelectionLogic.nextRow(after:in:direction:)` / `reconcile(previous:in:)`(行版)を追加(端クランプ・可視外フォールバック・残存維持セマンティクスは leaf 版と一致)。**新規テスト 10 件**(`TreeBuilder` 5 / `SelectionLogic` 5)、計 94 green
+- **AppState 拡張**: 内部状態を `selection: SidebarSelection?` に変更し、`selectedFile: HTMLFile?` を **computed property**(`.file` 抽出)に降格。`moveSelection(_:)` は RECENT で従来の leaf 版 `next`、TREE で行版 `nextRow` に分岐。`activateSelection()` を追加(dir 選択時のみ `toggleExpansion`、file 選択 / RECENT は no-op)。`searchText.didSet` と `rescan` の reconcile も tab-aware に行版/leaf 版を切替(TREE タブで dir 選択も保持)。EXTERNAL ピンガードは `if case .file(let f) = selection, f.isExternal` で維持
+- **UI**: `HTMLViewerApp.installKeyMonitor` に **`keyCode` ベース判定**で `↑(126)/↓(125)/Return(36)/Enter(76)` を追加(`charactersIgnoringModifiers` は矢印/Return で非 ASCII 制御文字を返すため文字判定不可)。`SidebarView` の `List(selection:)` Binding を `SidebarSelection?` 化、`TreeRowsView` の dir 行にも `.tag(Optional(SidebarSelection.dir(id: node.id)))` を付与し(クリックで `.dir` 選択になる)、選択中 dir 行は label 色を amber 強調。List コンテナに `@FocusState var listFocused` + `.focused()` + `.onTapGesture { listFocused = true }` を当て、**WKWebView から first responder を奪う**経路を作る(プレビュー WKWebView が key first responder を握ったままだとクリック・矢印キーで selection が変わらない macOS 挙動への対処)
+- **dir 選択中のプレビュー挙動**: `selectedFile` getter が `.file` のみを返すため、dir 選択中は **直前のファイルプレビューが維持される**(切替ちらつき回避)。setter 経由の代入(`handleOpenedURLs` / `rescan` の `selectedFile = X`)は `selection = .file(X)` へ橋渡しされ、後方互換が保たれる
+- **docs/04 §5 M7**: ↑↓ / クリック / dir 展開→ファイル選択 / Return no-op の検証行を #12〜#15 に追加(GUI 手動、`make install` 後のバンドル版で実施)
+- スコープ外(意図的): Tab / Space / Right / Left のような Finder 標準キー、複数選択(Cmd/Shift-クリック)、マウスホイール選択移動、dir 選択時の「dir 配下の README 自動表示」(YAGNI)
+- **brush-up 第1ラウンド(2026-06-26・`/code-review medium` 2 件)**: すべて採用
+  - #1(CONFIRMED real bug): `rescan` の `if selectedFile == nil { selectedFile = recentFiles.first }` を **`if selection == nil` に変更**。`selectedFile` getter は `.dir` 選択中も nil を返すため、従来は FSEvent 由来の rescan が走るたびに dir 選択が file に上書きされていた(設計コメント L33-34「`.dir` 選択中は直前ファイルプレビュー維持」にも違反)。`selection` で判定して dir 選択を保持
+  - #2(重複の altitude): AppState の private `rowMatches` を削除し、`SelectionLogic.matches(_:_:)` を **public static** に昇格して呼び出し側を統一。`SidebarSelection` に case を追加したときに分岐ロジックが二箇所(SelectionLogic 内・AppState 内)で同期漏れする保守リスクを解消。新規テスト `matchesPublic`(file/dir 同 case 一致・不一致・case 違いの 6 パターン)を追加 — 計 95 green
+- **brush-up 第2ラウンド(2026-06-26・`/code-review medium` 2 件)**: すべて採用(round-1 で塞いだ `rescan` の dir 選択上書きに対称な漏れ系)
+  - **本質解として `recomputeTreeExpansion` / `rescan` の double dispatch を `selectedFile?.path` から `selection` 全体ベースに揚げる**(レビュアー提案どおり)。Core 側に `TreeBuilder.ancestors(ofDir:in:)` と `containsDir(_:in:)` を追加して、`.file`/`.dir` を同じ抽象で扱えるようにした(テスト +2)
+  - #1: `rescan` の stale-selection クリーンアップを `selection` 全 case で見るよう拡張。`.dir(id:)` 選択中に対象 dir が `result.files` から消えていれば `selection = nil` に倒し、直後の補充(`selection == nil` → `recentFiles.first`)に同じ経路で吸収される。EXTERNAL ピンは従来どおり対象外
+  - #2: `recomputeTreeExpansion` の祖先保護を `.file` 選択時の `ancestors(ofLeaf:)` だけでなく、`.dir` 選択時は `ancestors(ofDir:).union([id])`(自身も保護)に拡張。過去操作で `userCollapsedDirs` に親が入っていても、選択中 dir 自身と祖先は折りたたみより優先して可視に残る
+  - 計 97 green / `make check` pass
+- **brush-up 第3ラウンド(2026-06-26・`/code-review medium` 1 件)**: 採用
+  - `rescan` で `TreeBuilder.build(result.files)` を 2 回呼んでいたのを 1 回に統合。round-2 #1 で stale 判定用に追加した `newNodes` を、後続の `userCollapsedDirs.formIntersection(allDirIDs(...))` でも再利用する(同じ `result.files` から同ツリーが出るため結果不変)。FSEvent rescan が頻発するため、O(N log N) 相当のソート/再帰の二重実行を 1 回に減らす効果(N=5000 で非無視)
+
 (M10 以降、完了時に追記)
