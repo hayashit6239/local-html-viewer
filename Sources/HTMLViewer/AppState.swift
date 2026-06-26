@@ -89,16 +89,27 @@ final class AppState {
     /// 勝手に開き直さないための overlay(M7 review #1/#4)。手動展開で解除。
     private var userCollapsedDirs: Set<String> = []
 
-    /// 現在の状態(検索中か / 選択中 leaf)から TREE 展開集合を `TreeBuilder` で取り直す。
+    /// 現在の状態(検索中か / 選択中の行)から TREE 展開集合を `TreeBuilder` で取り直す。
     /// 自動算出した展開集合から「ユーザーが閉じた dir」を差し引く(sticky 折りたたみ)。
-    /// ただし選択中 leaf を見せるための祖先は折りたたみより優先して残す(選択は常に可視)。
+    /// ただし選択中の行(`.file` / `.dir` 両方)を見せるための祖先は折りたたみより優先して残す
+    /// (選択は常に可視)。`.dir` 選択時は dir 自身も保護対象に含める(#33 round-2 #2)。
     private func recomputeTreeExpansion() {
         var set = TreeBuilder.expansionSet(
             for: tree,
             searching: !searchText.isEmpty,
             selectedLeafPath: selectedFile?.path
         )
-        let selectionAncestors = selectedFile.map { TreeBuilder.ancestors(ofLeaf: $0.path, in: tree) } ?? []
+        let nodes = tree
+        var selectionAncestors: Set<String> = []
+        switch selection {
+        case .file(let f):
+            selectionAncestors = TreeBuilder.ancestors(ofLeaf: f.path, in: nodes)
+        case .dir(let id):
+            // dir 自身も折りたたみから保護(自身が `userCollapsedDirs` にあっても展開維持)+ 祖先も。
+            selectionAncestors = TreeBuilder.ancestors(ofDir: id, in: nodes).union([id])
+        case .none:
+            break
+        }
         set.subtract(userCollapsedDirs.subtracting(selectionAncestors))
         expandedDirs = set
     }
@@ -420,15 +431,21 @@ final class AppState {
                 }
             }
 
-            // 選択中ファイルが消えていたら解除し、未選択なら最新を選ぶ。
-            // EXTERNAL ピンは走査結果に出ないため対象外(再走査で選択を奪わない)。
-            if let sel = selectedFile, !sel.isExternal,
-                !result.files.contains(where: { $0.path == sel.path }) {
-                selectedFile = nil
+            // 選択中の行が走査結果から消えていたら解除する。`.file`/`.dir` を `selection` 全体で
+            // 見ることで、round-1 #1 で塞いだ `selectedFile` 上書きと対称に、消えた `.dir` 選択も
+            // 同じ経路で扱う(round-2 #1)。新ツリーは `result.files` 由来で構築して判定する。
+            let newNodes = TreeBuilder.build(result.files)
+            switch selection {
+            case .file(let f) where !f.isExternal:
+                if !result.files.contains(where: { $0.path == f.path }) { selection = nil }
+            case .dir(let id):
+                if !TreeBuilder.containsDir(id, in: newNodes) { selection = nil }
+            default:
+                break  // EXTERNAL ピンは走査結果に出ないため対象外(再走査で選択を奪わない)
             }
             // 未選択時のみ最新ファイルを補充する。`selectedFile` getter は `.dir` 選択中も nil を
             // 返すため、ここを `selectedFile == nil` で見ると dir 選択を上書きしてしまう。`selection`
-            // で判定して .dir 選択を保持する(設計コメント L33-34 参照 — PR #33 review #1)。
+            // で判定して .dir 選択を保持する(設計コメント L33-34 参照 — PR #33 round-1 #1)。
             if selection == nil {
                 selectedFile = recentFiles.first
             }

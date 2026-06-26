@@ -189,6 +189,31 @@ struct TreeBuilderTests {
         #expect(id0 == "/R/" && d0 == 0)
     }
 
+    @Test("ancestors(ofDir:): dir 自身は含まず祖先 dir のみ・ルートまで再帰(#33 round-2 #2)")
+    func ancestorsOfDir() {
+        let files = [f(root: "/R", rel: "x/y/z.html")]
+        let tree = TreeBuilder.build(files)
+        // 深い dir の祖先(自身は含まない)
+        #expect(TreeBuilder.ancestors(ofDir: "/R/x/y/", in: tree) == ["/R/", "/R/x/"])
+        // 浅い dir の祖先(ルートのみ・自身は含まない)
+        #expect(TreeBuilder.ancestors(ofDir: "/R/x/", in: tree) == ["/R/"])
+        // ルート自身の祖先(空)
+        #expect(TreeBuilder.ancestors(ofDir: "/R/", in: tree) == [])
+        // 存在しない dir(空)
+        #expect(TreeBuilder.ancestors(ofDir: "/missing/", in: tree) == [])
+    }
+
+    @Test("containsDir: 現ツリーに dir が存在するか(#33 round-2 #1)")
+    func containsDirCheck() {
+        let files = [f(root: "/R", rel: "x/y/z.html")]
+        let tree = TreeBuilder.build(files)
+        #expect(TreeBuilder.containsDir("/R/", in: tree))
+        #expect(TreeBuilder.containsDir("/R/x/", in: tree))
+        #expect(TreeBuilder.containsDir("/R/x/y/", in: tree))
+        #expect(!TreeBuilder.containsDir("/R/x/y/z.html", in: tree))  // leaf は dir でない
+        #expect(!TreeBuilder.containsDir("/missing/", in: tree))
+    }
+
     @Test("visibleRows: visibleLeaves と file 部分が一致(後方互換確認)")
     func visibleRowsFilesMatchVisibleLeaves() {
         let files = [

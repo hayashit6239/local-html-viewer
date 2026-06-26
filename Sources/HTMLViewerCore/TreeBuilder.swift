@@ -88,8 +88,27 @@ public enum TreeBuilder {
     /// leaf を可視化するために展開すべき祖先 dir の id 集合(ルートまで再帰)。
     public static func ancestors(ofLeaf leafPath: String, in nodes: [TreeNode]) -> Set<String> {
         var result = Set<String>()
-        _ = findPath(leafPath, in: nodes, accumulated: [], into: &result)
+        _ = findLeafPath(leafPath, in: nodes, accumulated: [], into: &result)
         return result
+    }
+
+    /// dir 自身を可視化するために展開すべき祖先 dir の id 集合(自身は含まない・ルートまで再帰)。
+    /// `.dir` 選択を見せる際の祖先保護(`recomputeTreeExpansion`)で使う(#33 round-2 #2)。
+    public static func ancestors(ofDir dirID: String, in nodes: [TreeNode]) -> Set<String> {
+        var result = Set<String>()
+        _ = findDirPath(dirID, in: nodes, accumulated: [], into: &result)
+        return result
+    }
+
+    /// 指定 dir id が現ツリーに存在するか(`.dir` 選択の stale 検出に使う — #33 round-2 #1)。
+    public static func containsDir(_ dirID: String, in nodes: [TreeNode]) -> Bool {
+        for node in nodes {
+            if !node.isLeaf {
+                if node.id == dirID { return true }
+                if let children = node.children, containsDir(dirID, in: children) { return true }
+            }
+        }
+        return false
     }
 
     /// 全 leaf を visit 順に平坦化(OutlineGroup が全展開で描画する TREE の j/k 用)。
@@ -153,7 +172,7 @@ public enum TreeBuilder {
     }
 
     @discardableResult
-    private static func findPath(
+    private static func findLeafPath(
         _ leafPath: String,
         in nodes: [TreeNode],
         accumulated: [String],
@@ -163,9 +182,26 @@ public enum TreeBuilder {
             if node.isLeaf {
                 if node.id == leafPath { result.formUnion(accumulated); return true }
             } else if let children = node.children {
-                if findPath(leafPath, in: children, accumulated: accumulated + [node.id], into: &result) {
+                if findLeafPath(leafPath, in: children, accumulated: accumulated + [node.id], into: &result) {
                     return true
                 }
+            }
+        }
+        return false
+    }
+
+    @discardableResult
+    private static func findDirPath(
+        _ dirID: String,
+        in nodes: [TreeNode],
+        accumulated: [String],
+        into result: inout Set<String>
+    ) -> Bool {
+        for node in nodes where !node.isLeaf {
+            if node.id == dirID { result.formUnion(accumulated); return true }
+            if let children = node.children,
+                findDirPath(dirID, in: children, accumulated: accumulated + [node.id], into: &result) {
+                return true
             }
         }
         return false
