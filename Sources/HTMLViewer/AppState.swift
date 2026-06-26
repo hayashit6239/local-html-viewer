@@ -218,13 +218,20 @@ final class AppState {
 
         // .html 拡張は通るが Policy 不通過 = 「実在しない」or「canonicalPath 由来で path 不一致」。
         // silent drop せず、ピン中なら落とし unreadable に記録(M5 🟡-2 の挙動を維持)。
+        // ピン落とし判定: `pinnedExternal.path` は保存時に canonical resolved(`makeExternalFile`)。
+        // 削除済みファイルでは canonicalPath が nil を返すため、`url.path`(symlink パス)が
+        // 保存値と一致しない symlink-delete ケースを取りこぼす。canonical 成功時の cpath と
+        // `url.path` の両方を保存値と比較し、どちらかが一致すれば deleted-pin と判定する
+        // (M5 🟡-2 の invariant を symlink ケースにも拡張 — PR #35 round-1 #3)。
         for url in urls where IgnoreRules.isHTMLFile(url.lastPathComponent) {
             if acceptableSet.contains(url.path) { continue }
-            let cpath = (try? url.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath)
-                ?? url.path
-            if cpath == pinnedExternal?.path {
+            let canonical = try? url.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath
+            if let pinPath = pinnedExternal?.path,
+                pinPath == canonical || pinPath == url.path {
                 pinnedExternal = nil
-                if selectedFile?.path == cpath { selectedFile = nil }
+                if let sel = selectedFile?.path, sel == canonical || sel == url.path {
+                    selectedFile = nil
+                }
             }
             unreadable = url.path
         }
@@ -248,7 +255,10 @@ final class AppState {
                 lastExternal = (cpath, mtime)
             }
         }
-        if let p = pendingInternal { pendingInternalSelectionPath = p }
+        // 各 handleOpenedURLs 呼び出しが pending slot の所有権を持つ。前回呼び出しが残した
+        // stale path が次回 rescan flush 時に蘇って、より新しい event の選択を黙って上書き
+        // するのを防ぐため、無条件代入で当回の結果(nil 含む)に置換する(PR #35 round-1 #1)。
+        pendingInternalSelectionPath = pendingInternal
 
         if let ext = lastExternal {
             if ext.path != pinnedExternal?.path {
@@ -394,10 +404,13 @@ final class AppState {
             // コールド起動 race(#34 🔴): odoc が `rescan` 完了前に届き内部 URL が `allFiles` に
             // 未反映だった場合の退避 path を、ここで再引き当て → 選択に昇格。1 回限りで flush。
             // 未解決(MAX_FILES 打ち切り等)は捨てる(unreadable には流さない: 元々内部 URL のため)。
+            // **`unreadableExternalPath` は触らない**(PR #35 round-1 #2): pending を立てた
+            // handleOpenedURLs 呼び出しは `pendingInternal == nil` ガードで unreadable を立てない
+            // ため、現に `unreadableExternalPath` が非 nil なら別 event の独立した警告。
+            // flush でクリアすると無関係な警告を消してしまう。
             if let pending = pendingInternalSelectionPath {
                 if let match = result.files.first(where: { $0.path == pending }) {
                     selectedFile = match
-                    unreadableExternalPath = nil
                 }
                 pendingInternalSelectionPath = nil
             }

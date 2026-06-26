@@ -231,5 +231,10 @@ ad-hoc 署名は再ビルドごとに CDHash が変わるため、`~/Documents` 
 - **🟡 3 `Theme.Spacing` / `Theme.Radius.button` 削除**: M9 で集約した spacing/radius 定数のうち、`Spacing.xs/sm/md/lg` と `Radius.button = 6` は production call site が無く「将来の配線のため」の宙吊り定数だった(M9 review #1 で「call site 不在のため未検証」と自認)。削除して YAGNI に戻す。`Radius.badge = 3` は使用中なので残す。再導入は配線する PR で同時に行う
 - **テスト**: 既存 84 件すべて green(回帰なし)。Core 純関数の新規追加は最小(🔴 race fix の pending 再引き当ては 1-liner で `swift test` 価値が薄いため AppState 内で完結)。🔴 / 🟡 2 は UI race のため**手動検証**(`make install` 後の Claude Code hook 経由コールド起動 / j/k 連打 + 大きな HTML)
 - **誤指摘の除外**: reviewer が当初挙げた「docs/code の `↑↓` 記述と key monitor の処理キー解離」は、現 main(`f4bcb69`)が PR #33(`feat/issue-32-sidebar-keynav`)を未マージで実際は記述と実装が乖離している(reviewer が PR #30 = `feat/m9-polish-icns-readme` を `feat/issue-32-sidebar-keynav` と誤認)。本指摘は #33 マージで自然解消するため本 PR では扱わない(issue #34 本文でも除外明記)
+- **brush-up 第1ラウンド(2026-06-26・`/code-review medium` 3 件)**: すべて採用(🔴 race fix の派生エッジ)
+  - #1 `pendingInternalSelectionPath` の所有権漏れ: `if let p = pendingInternal { pendingInternalSelectionPath = p }` の条件代入を **無条件代入(`pendingInternalSelectionPath = pendingInternal`)** に変更。前回 cold-start event が残した stale path が次回 rescan flush で蘇り、より新しい event(外部ピン B 等)を黙って上書きするのを防ぐ。各 `handleOpenedURLs` 呼び出しが pending slot の所有権を持つ
+  - #2 rescan flush が独立 event の `unreadableExternalPath` を消す: `if let match = result.files.first ... { selectedFile = match; unreadableExternalPath = nil }` の **`unreadableExternalPath = nil` を削除**。`handleOpenedURLs` 側の `unreadable` 設定は `pendingInternal == nil` でガードされているため、flush 時点で残っている `unreadableExternalPath` は別 event の独立警告であり、消すと無関係な警告が消える(double-count を避ける)
+  - #3 deleted-pin の symlink path 比較: `cpath = canonicalPath || url.path` の fallback と `cpath == pinnedExternal?.path` 比較が、保存値(canonical resolved)と raw symlink path で対称でなかった。**canonical 成功時の cpath と `url.path` の両方を保存値と比較**してどちらか一致でピン落とし(M5 🟡-2 の invariant を symlink-delete ケースにも拡張)。`selectedFile` クリアも同じ比較を適用
+  - 計 84 green / `make check` pass
 
 (M10 以降、完了時に追記)
