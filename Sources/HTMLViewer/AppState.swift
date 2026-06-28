@@ -23,8 +23,26 @@ final class AppState {
     private(set) var allFiles: [HTMLFile] = []
     /// MAX_FILES 到達で打ち切ったか。
     private(set) var scanTruncated = false
-    /// 選択中ファイル。WebView でプレビューする。
-    var selectedFile: HTMLFile?
+    /// サイドバーの選択(#32 で `HTMLFile?` から拡張)。TREE で dir を選択できるようになり、
+    /// Enter キー(`activateSelection`)で展開トグルする経路が成立する。プレビュー(`selectedFile`)は
+    /// `.file` のときのみ追従。`.dir` 選択中は直前のファイルプレビューが残る(ちらつき回避)。
+    var selection: SidebarSelection?
+
+    /// プレビュー対象ファイル(後方互換 computed)。`selection` から `.file` を抽出する。
+    /// 既存の `selectedFile = X` 形式の代入は setter で `selection = .file(X)` に橋渡し(後方互換 shim)。
+    /// `.dir` 選択中の preview 維持は `selectedFile` の getter/setter ではなく、`rescan` や
+    /// `recomputeTreeExpansion` 等の **呼び出し側が `selection == nil` で判定する経路**で実現する
+    /// (round-1 #1 / round-2 #1)。getter は `.dir` 選択中は nil を返し、preview が消えない理由は
+    /// WKWebView が前回 loadFileURL の結果を保持しているため(round-4 #3: コメント因果ループの修正)。
+    var selectedFile: HTMLFile? {
+        get {
+            if case .file(let f) = selection { return f }
+            return nil
+        }
+        set {
+            selection = newValue.map { .file($0) }
+        }
+    }
     /// プレビューの明示リロード要求(loadFileURL 再実行を発火させる単調増加トークン)。
     private(set) var reloadToken = 0
     /// 登録フォルダ外を受信した EXTERNAL ピン(単一・セッション限り・非永続)。RECENT 先頭に合成する。
@@ -56,10 +74,23 @@ final class AppState {
         didSet {
             recomputeTreeExpansion()
             // EXTERNAL ピンを選択中は検索で選択をすり替えない。ピンは検索リストに出ないため
-            // reconcile が visibleLeaves.first へ飛ばし、見ていた外部プレビューが無関係ファイルへ
-            // スワップするのを防ぐ(M7 review #3)。
-            if selectedFile?.isExternal != true {
-                selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+            // reconcile が先頭へ飛ばし、見ていた外部プレビューが無関係ファイルへスワップするのを防ぐ(M7 review #3)。
+            if case .file(let f) = selection, f.isExternal {
+                // keep
+            } else {
+                switch selectedTab {
+                case .recent:
+                    selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+                case .tree:
+                    // previous が `.file` の場合は leaf 版で reconcile して file → file の遷移を保つ
+                    // (行版で visible.first を返すと visibleRows 先頭の dir に倒れ preview が消える
+                    // — PR #33 round-4 #1)。previous が `.dir` の場合のみ行版で扱う。
+                    if case .file = selection {
+                        selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+                    } else {
+                        selection = SelectionLogic.reconcile(previous: selection, in: visibleRows)
+                    }
+                }
             }
             recomputeTreeExpansion()
         }
@@ -72,16 +103,27 @@ final class AppState {
     /// 勝手に開き直さないための overlay(M7 review #1/#4)。手動展開で解除。
     private var userCollapsedDirs: Set<String> = []
 
-    /// 現在の状態(検索中か / 選択中 leaf)から TREE 展開集合を `TreeBuilder` で取り直す。
+    /// 現在の状態(検索中か / 選択中の行)から TREE 展開集合を `TreeBuilder` で取り直す。
     /// 自動算出した展開集合から「ユーザーが閉じた dir」を差し引く(sticky 折りたたみ)。
-    /// ただし選択中 leaf を見せるための祖先は折りたたみより優先して残す(選択は常に可視)。
+    /// ただし選択中の行(`.file` / `.dir` 両方)を見せるための祖先は折りたたみより優先して残す
+    /// (選択は常に可視)。`.dir` 選択時は dir 自身も保護対象に含める(#33 round-2 #2)。
     private func recomputeTreeExpansion() {
         var set = TreeBuilder.expansionSet(
             for: tree,
             searching: !searchText.isEmpty,
             selectedLeafPath: selectedFile?.path
         )
-        let selectionAncestors = selectedFile.map { TreeBuilder.ancestors(ofLeaf: $0.path, in: tree) } ?? []
+        let nodes = tree
+        var selectionAncestors: Set<String> = []
+        switch selection {
+        case .file(let f):
+            selectionAncestors = TreeBuilder.ancestors(ofLeaf: f.path, in: nodes)
+        case .dir(let id):
+            // dir 自身も折りたたみから保護(自身が `userCollapsedDirs` にあっても展開維持)+ 祖先も。
+            selectionAncestors = TreeBuilder.ancestors(ofDir: id, in: nodes).union([id])
+        case .none:
+            break
+        }
         set.subtract(userCollapsedDirs.subtracting(selectionAncestors))
         expandedDirs = set
     }
@@ -122,7 +164,8 @@ final class AppState {
         TreeBuilder.build(filteredFiles)
     }
 
-    /// 現タブの可視 leaf 列(j/k の移動対象)。TREE は展開中 dir 配下のみ(折りたたみ dir は飛ばす)。
+    /// 現タブの可視 leaf 列(RECENT の j/k 移動対象 / 検索 reconcile 用)。
+    /// TREE は展開中 dir 配下の leaf のみ(folder 行は含まない — 行ベースの可視列は `visibleRows`)。
     private var visibleLeaves: [HTMLFile] {
         switch selectedTab {
         case .recent: return recentFiles
@@ -130,17 +173,37 @@ final class AppState {
         }
     }
 
-    /// j(down)/k(up)で選択を移動し即プレビュー。
-    /// 選択が可視列に無い(TREE で折りたたみ/タブ切替により隠れた)ときは、全 leaf 順序を
-    /// 基準に同方向の最近可視 leaf へ移し、先頭ジャンプを防ぐ。
-    /// 可視列が空(全 dir 折りたたみ等)で nil が返る場合は現選択を維持し、プレビューを消さない(M7 review #1)。
+    /// TREE タブの可視行列(dir + leaf。#32 の方向キー/Enter で扱う列)。
+    private var visibleRows: [TreeRow] {
+        TreeBuilder.visibleRows(tree, expanded: expandedDirs)
+    }
+
+    /// 方向キー/j/k で選択を移動。RECENT は leaf のみ、TREE は **dir も含めた行列**(#32)で移動する。
+    /// 可視列が空のときは現選択を維持(プレビューを消さない)。
+    /// RECENT は visible と fullOrder が同じ `recentFiles`(検索フィルタ後)で、leaf 版 `next` に
+    /// fullOrder を渡しているが visible⊂fullOrder の救済は実質作用しない(round-4 #4: 名目のみ)。
     func moveSelection(_ direction: SelectionDirection) {
-        let fullOrder: [HTMLFile] = selectedTab == .tree ? TreeBuilder.allLeaves(tree) : recentFiles
-        if let next = SelectionLogic.next(
-            after: selectedFile, in: visibleLeaves, fullOrder: fullOrder, direction: direction
-        ) {
-            selectedFile = next
+        switch selectedTab {
+        case .recent:
+            if let next = SelectionLogic.next(
+                after: selectedFile, in: recentFiles, fullOrder: recentFiles, direction: direction
+            ) {
+                selectedFile = next
+            }
+        case .tree:
+            if let next = SelectionLogic.nextRow(
+                after: selection, in: visibleRows, direction: direction
+            ) {
+                selection = next
+            }
         }
+    }
+
+    /// Enter キー: TREE で dir が選択されていれば展開トグル(`activate`)。file 選択 / RECENT は no-op。
+    /// 展開後、続けて方向キーで dir 配下のファイルが順に選択できる(#32)。
+    func activateSelection() {
+        guard case .dir(let id) = selection else { return }
+        setExpanded(id, !isExpanded(id))
     }
 
     /// 選択中ファイルを Finder で表示(未選択なら no-op)。
@@ -427,13 +490,26 @@ final class AppState {
                 }
             }
 
-            // 選択中ファイルが消えていたら解除し、未選択なら最新を選ぶ。
-            // EXTERNAL ピンは走査結果に出ないため対象外(再走査で選択を奪わない)。
-            if let sel = selectedFile, !sel.isExternal,
-                !result.files.contains(where: { $0.path == sel.path }) {
-                selectedFile = nil
+            // 選択中の行が走査結果から消えていたら解除する。`.file`/`.dir` を `selection` 全体で
+            // 見ることで、round-1 #1 で塞いだ `selectedFile` 上書きと対称に、消えた `.dir` 選択も
+            // 同じ経路で扱う(round-2 #1)。新ツリーは `result.files` 由来で構築して判定する。
+            let newNodes = TreeBuilder.build(result.files)
+            // 全 case を明示分岐する(将来 `SidebarSelection` に新 case が増えたとき、`default`
+            // ですり抜けて stale クリーンアップが走らない事故を防ぐ — round-4 #5)。
+            switch selection {
+            case .file(let f) where !f.isExternal:
+                if !result.files.contains(where: { $0.path == f.path }) { selection = nil }
+            case .file:
+                break  // EXTERNAL ピンは走査結果に出ないため対象外(再走査で選択を奪わない)
+            case .dir(let id):
+                if !TreeBuilder.containsDir(id, in: newNodes) { selection = nil }
+            case .none:
+                break  // 未選択(直後の補充ロジックで recentFiles.first を立てる)
             }
-            if selectedFile == nil {
+            // 未選択時のみ最新ファイルを補充する。`selectedFile` getter は `.dir` 選択中も nil を
+            // 返すため、ここを `selectedFile == nil` で見ると dir 選択を上書きしてしまう。`selection`
+            // で判定して .dir 選択を保持する(設計コメント L33-34 参照 — PR #33 round-1 #1)。
+            if selection == nil {
                 selectedFile = recentFiles.first
             }
             // 削除/再走査で消えた dir id を userCollapsedDirs から除去する。蓄積メモリリークを防ぎ、
@@ -442,17 +518,42 @@ final class AppState {
             // **全ファイル(result.files)由来のツリー**で intersection する。検索フィルタ後の `tree` で
             // 行うと、検索中に rescan が走ったとき一時的に隠れている dir が evict され、検索クリア後に
             // 折りたたみ意図が失われる(round-5 #1)。
-            userCollapsedDirs.formIntersection(TreeBuilder.allDirIDs(TreeBuilder.build(result.files)))
+            // 上の stale 判定で構築した `newNodes` を再利用(同 `result.files` から同ツリーが
+            // 出るため二重ビルドを避ける — #33 round-3)。
+            userCollapsedDirs.formIntersection(TreeBuilder.allDirIDs(newNodes))
             // 走査でツリー構造が変わったので展開を取り直す(既定ポリシー + 選択の親 dir 自動展開)。
             recomputeTreeExpansion()
             // 検索中に rename 等で選択が filter から外れたら可視列へ reconcile し、
             // 「ファイルは存在するが検索結果に不可視」状態を解消する(M7 review #6)。
-            // ただし EXTERNAL ピンは TREE の visibleLeaves に出ないため、reconcile で内部ファイルに
+            // ただし EXTERNAL ピンは visibleLeaves に出ないため、reconcile で内部ファイルに
             // すり替わり外部プレビューが消えるのを防ぐ(searchText.didSet と同じガード — round-5 #2)。
-            if !searchText.isEmpty, let sel = selectedFile, !sel.isExternal,
-                !visibleLeaves.contains(where: { $0.id == sel.id }) {
-                selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
-                recomputeTreeExpansion()
+            // TREE タブは dir 選択も拾えるよう行版 reconcile を使う(#32)。
+            if !searchText.isEmpty {
+                if case .file(let f) = selection, f.isExternal {
+                    // EXTERNAL ピン保持
+                } else {
+                    switch selectedTab {
+                    case .recent:
+                        if let sel = selectedFile,
+                           !visibleLeaves.contains(where: { $0.id == sel.id }) {
+                            selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+                            recomputeTreeExpansion()
+                        }
+                    case .tree:
+                        if let sel = selection,
+                           !visibleRows.contains(where: { SelectionLogic.matches($0, sel) }) {
+                            // searchText.didSet と同じ非対称対策: .file 選択は leaf 版で
+                            // file → file の遷移を保つ(行版で visibleRows.first を返すと dir
+                            // に倒れ preview が消える — PR #33 round-4 #1 と同根)。
+                            if case .file = selection {
+                                selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+                            } else {
+                                selection = SelectionLogic.reconcile(previous: selection, in: visibleRows)
+                            }
+                            recomputeTreeExpansion()
+                        }
+                    }
+                }
             }
         }
     }

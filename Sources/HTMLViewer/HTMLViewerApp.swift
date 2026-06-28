@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox  // kVK_* keyCode 定数(マジックナンバー回避 — round-4 #6)
 import SwiftUI
 import WebKit
 
@@ -31,7 +32,7 @@ struct HTMLViewerApp: App {
 }
 
 /// ビューアキーの local key monitor を設置する。テキスト入力中(検索フィールド / プレビュー
-/// WKWebView 内の `<input>`・`<textarea>`)は j/k/r/`/` を飲み込まずキー入力へ透過する。
+/// WKWebView 内の `<input>`・`<textarea>`)は j/k/r/`/`/↑↓/Return を飲み込まずキー入力へ透過する。
 /// (`.onKeyPress` はフォーカス取りこぼしがあるため monitor で受ける)。
 @MainActor
 private func installKeyMonitor(_ app: AppState) -> Any? {
@@ -44,6 +45,19 @@ private func installKeyMonitor(_ app: AppState) -> Any? {
         let cmd = flags.contains(.command)
         let shift = flags.contains(.shift)
         let optOrCtrl = flags.contains(.option) || flags.contains(.control)  // ⌥r='®' / ⌃r 等は横取りしない
+
+        // 矢印キー / Return / Enter は `charactersIgnoringModifiers` が非 ASCII 制御文字を返すため
+        // `keyCode` で判定する(#32)。j/k / ↑↓ は等価、Return / Enter(numpad)は activate(dir 展開)。
+        // Carbon の `kVK_*` で名前付け(マジックナンバー回避・将来のキー追加時の typo 防止 — round-4 #6)。
+        if !cmd && !optOrCtrl {
+            switch Int(event.keyCode) {
+            case kVK_DownArrow: app.moveSelection(.down); return nil
+            case kVK_UpArrow:   app.moveSelection(.up);   return nil
+            case kVK_Return, kVK_ANSI_KeypadEnter: app.activateSelection(); return nil
+            default: break
+            }
+        }
+
         // Caps Lock 有効時 charactersIgnoringModifiers は 'r' を 'R' に変えるため、小文字へ正規化して
         // から判定する。reload と reveal は文字でなく修飾(cmd&&shift か否か)で振り分ける(M7 review #3)。
         // Shift+/ は '?' を返し "/" に一致しないため横取りされない('r' と対称)。

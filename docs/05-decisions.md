@@ -55,3 +55,10 @@
 - **撤退路**: A-1 の賭けが外れた場合(深い木で起動時 stat が支配的になる等)は、M6 で **FSEvents 増分監視 + 前回走査結果のキャッシュ**(起動時は前回結果を即表示 → バックグラウンドで非同期更新)を導入する。現段階でキャッシュは実装しない(スコープ過剰)。
 - **理由**: issue #8 再レビュー L3 / L4。「体感に問題が出にくい」を未実測の仮定のまま DoD の外に置くのを避け、実測値と撤退基準を明文化する。
 - **代替案**: ① 初回からキャッシュ実装(M3 のスコープが膨らみ粒度が崩れる)② 性能をハード DoD 化(5000 件規模では過剰。前回決定 3 のとおり soft に留める)。
+
+## D10: TREE 選択は行ベース(file/dir)に拡張し、Enter は dir のみトグル(2026-06-26)
+
+- **決定**: TREE タブの選択モデルを `HTMLFile?`(ファイルのみ)から `SidebarSelection`(`.file` / `.dir`)に拡張する。方向キー(↑↓ / j/k)は **`TreeBuilder.visibleRows`** で平坦化した dir/file 混在の行列を舐め、`Return` / `Enter` は **dir 選択時のみ** 展開トグル(file 選択 / RECENT は no-op)。RECENT(フラット)は従来通り leaf のみの移動。プレビュー(`selectedFile`)は `selection` の `.file` を抽出する computed property として後方互換維持。dir 選択中はプレビューが切り替わらない(直前の file が残る = ちらつき回避)。
+- **理由**: issue #32。M7 で実装した j/k はファイル間移動のみで、深い階層を辿るには「dir 行を選んで展開する」操作経路が必須(Finder ライクな最低限の階層操作)。Core(`visibleRows` / `nextRow` / 行版 `reconcile`)で TDD 可能な領域を最大化し、UI 層(`SidebarView` / `HTMLViewerApp`)は薄く保つ(D5 Humble Object の延長)。
+- **代替案**: ① `↑↓` だけ追加 + クリック修正 + dir 選択は見送り(fix 最小だが「dir を選んで Enter で開く」要件を満たさない) ② Selection は維持し、別キー(例: `space`)で「カーソル位置の親 dir をトグル」(Selection 拡張不要だが直感的経路にならない)。
+- **付帯**: クリック選択を効かせるため、サイドバー List に `@FocusState` を当て、クリックで WKWebView から first responder を奪う(プレビュー WKWebView が key first responder を握り続ける macOS 挙動への対処)。Tab/Space/Right/Left のような Finder 標準キーは本決定のスコープ外(後追い可能)。

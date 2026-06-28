@@ -68,3 +68,22 @@ public struct TreeNode: Identifiable, Sendable, Hashable {
         self.children = children
     }
 }
+
+/// サイドバーの選択対象(#32)。
+/// TREE タブで「方向キーで dir も file も舐める」+「Enter で dir 展開トグル」を表現するため、
+/// 従来の `HTMLFile?`(file のみ)から拡張する。`AppState.selectedFile` は本型から `.file` を
+/// 抽出する computed property として後方互換を維持する。
+public enum SidebarSelection: Hashable, Sendable {
+    case file(HTMLFile)
+    /// `id` は `TreeNode.id`(dir パス + 末尾 `/`)。`expandedDirs` と同じ id 空間。
+    case dir(id: String)
+}
+
+/// TREE タブの可視行(#32)。`visibleRows` が展開済み dir 配下を depth-first に平坦化した結果で、
+/// 方向キーでの行移動(file と dir を同列に舐める)に使う。
+/// インデント表示は SwiftUI のネイティブ階層描画(`DisclosureGroup`)に任せるため、行ベース
+/// 操作には id のみで十分(round-4 #2 で `depth` を YAGNI として削除)。
+public enum TreeRow: Hashable, Sendable {
+    case file(HTMLFile)
+    case dir(id: String)
+}
