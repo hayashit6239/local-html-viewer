@@ -1,6 +1,31 @@
 import AppKit
 import HTMLViewerCore
 import SwiftUI
+import os
+
+/// 選択追従スクロールのアニメーション時間。selection 変更時とタブ切替時で共通(PR #38 review #4)。
+private let scrollAnimationDuration: Double = 0.15
+
+/// `yieldFirstResponderFromWebView` 用 logger。`Console.app` から
+/// subsystem=`com.hayashi.htmlviewer`, category=`firstResponder` で観測できる(PR #38 review #2)。
+private let firstResponderLog = Logger(subsystem: "com.hayashi.htmlviewer", category: "firstResponder")
+
+/// WKWebView(プレビュー)が key first responder を握ったままだと NSTableView の
+/// `firstClickValid=false` 挙動でクリック・矢印キーが selection 更新まで届かない macOS 挙動を救う
+/// canonical な実装(#36)。SwiftUI の `@FocusState` は AppKit 層の `makeFirstResponder` を呼ば
+/// ないので、AppKit を直接叩く。`makeFirstResponder(nil)` は window レベルへ first responder を
+/// 戻す効果で、結果として `installKeyMonitor` の `keyEventShouldYieldToFocus()` が false を
+/// 返しキー操作がビューアキーとして扱われるようになる。
+///
+/// SidebarView と TreeRowsView の両方から呼ぶため file スコープに置く(複数所有者で同期漏れする
+/// リスクを排除 — PR #38 review #1)。観測用に奪取前の first responder クラス名と `makeFirstResponder`
+/// の戻り値を 1 行ログする(再発時の切り分けコスト削減 — PR #38 review #2)。
+fileprivate func yieldFirstResponderFromWebView() {
+    guard let window = NSApp.keyWindow else { return }
+    let previous = window.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
+    let accepted = window.makeFirstResponder(nil)
+    firstResponderLog.debug("yield from \(previous, privacy: .public) accepted=\(accepted, privacy: .public)")
+}
 
 /// 左サイドバー: 登録フォルダ管理 + 検索 + RECENT / TREE リスト。
 struct SidebarView: View {
@@ -68,10 +93,8 @@ struct SidebarView: View {
 
             // ── リスト(タブ別)──
             // List(selection:) は SidebarSelection? を受ける(#32: file/dir を同列に選択可能)。
-            // 各行に `.onTapGesture` を当てて selection を SwiftUI 内で直接書き込み、同時に
-            // `NSApp.keyWindow?.makeFirstResponder(nil)` で WKWebView から AppKit 層の first
-            // responder を外す(#36: PR #33 の @FocusState 方式は AppKit makeFirstResponder に
-            // 翻訳されず無効だったため、AppKit 直叩きで奪う)。
+            // 各行 `.onTapGesture` で `app.selection` を書きつつ `yieldFirstResponderFromWebView()`
+            // を呼ぶ(WKWebView 奪取の WHY は同関数の docstring 参照 — #36)。
             // ScrollViewReader + .onChange で「選択が表示範囲外なら追従(範囲内なら no-op)」(#37)。
             ScrollViewReader { proxy in
                 Group {
@@ -108,13 +131,13 @@ struct SidebarView: View {
                 }
                 .onChange(of: app.selection) { _, new in
                     guard let new else { return }
-                    withAnimation(.easeOut(duration: 0.15)) {
+                    withAnimation(.easeOut(duration: scrollAnimationDuration)) {
                         proxy.scrollTo(new, anchor: nil)
                     }
                 }
                 .onChange(of: app.selectedTab) { _, _ in
                     guard let sel = app.selection else { return }
-                    withAnimation(.easeOut(duration: 0.15)) {
+                    withAnimation(.easeOut(duration: scrollAnimationDuration)) {
                         proxy.scrollTo(sel, anchor: nil)
                     }
                 }
@@ -204,16 +227,6 @@ struct SidebarView: View {
         }
     }
 
-    /// WKWebView(プレビュー)が key first responder を握ったままだと NSTableView の
-    /// firstClickValid=false 挙動でクリック・矢印キーが selection 更新まで届かない macOS 挙動を救う。
-    /// SwiftUI の `@FocusState` は AppKit 層の `makeFirstResponder` を呼ばないので、AppKit を
-    /// 直接叩く(#36)。`makeFirstResponder(nil)` は window レベルへ first responder を戻す効果で、
-    /// 結果として `installKeyMonitor` の `keyEventShouldYieldToFocus()` が false を返しキー操作が
-    /// ビューアキーとして扱われるようになる。
-    private func yieldFirstResponderFromWebView() {
-        NSApp.keyWindow?.makeFirstResponder(nil)
-    }
-
     /// システム設定の「プライバシーとセキュリティ > ファイルとフォルダ」を開く。
     /// ad-hoc アプリは TCC を自動付与できないため、できるのは再許可の導線提示まで。
     private func openFilesAndFoldersSettings() {
@@ -252,13 +265,12 @@ private struct TreeRowsView: View {
                     .listRowBackground(Color.clear)
                     .onTapGesture {
                         app.selection = .file(file)
-                        NSApp.keyWindow?.makeFirstResponder(nil)
+                        yieldFirstResponderFromWebView()
                     }
             } else {
                 // dir 行にも tag を付け、クリックで `.dir(id)` 選択になるようにする(#32)。
-                // DisclosureGroup の chevron(disclosure indicator)クリックは従来通り個別開閉が走る。
-                // label にだけ .onTapGesture を当てて selection を書き込む(DisclosureGroup の
-                // chevron クリックは label 外なので独立して開閉が走り続ける — #36)。
+                // DisclosureGroup の chevron(disclosure indicator)クリックは label 外なので
+                // 独立して開閉が走り続ける(#36)。
                 DisclosureGroup(isExpanded: expansion(of: node.id)) {
                     TreeRowsView(nodes: node.children ?? [])
                 } label: {
@@ -268,7 +280,7 @@ private struct TreeRowsView: View {
                         .contentShape(Rectangle())
                         .onTapGesture {
                             app.selection = .dir(id: node.id)
-                            NSApp.keyWindow?.makeFirstResponder(nil)
+                            yieldFirstResponderFromWebView()
                         }
                 }
                 .tag(Optional(SidebarSelection.dir(id: node.id)))
