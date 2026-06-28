@@ -6,10 +6,6 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(AppState.self) private var app
     @FocusState private var searchFocused: Bool
-    /// List(サイドバー)のフォーカス。WKWebView(プレビュー)が key first responder を握ったままだと
-    /// クリック・矢印キーで selection が変わらない macOS 挙動を救う(#32)。クリックで奪取し、
-    /// 検索 / WebView へのフォーカス遷移時には自然に外れる。
-    @FocusState private var listFocused: Bool
 
     var body: some View {
         @Bindable var app = app
@@ -72,35 +68,56 @@ struct SidebarView: View {
 
             // ── リスト(タブ別)──
             // List(selection:) は SidebarSelection? を受ける(#32: file/dir を同列に選択可能)。
-            // クリックで `listFocused = true` を立て、WKWebView から first responder を奪う。
-            if app.selectedTab == .recent {
-                List(selection: $app.selection) {
-                    ForEach(app.recentFiles) { file in
-                        FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
-                            .tag(Optional(SidebarSelection.file(file)))
-                            .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
-                            .listRowBackground(Color.clear)
+            // 各行に `.onTapGesture` を当てて selection を SwiftUI 内で直接書き込み、同時に
+            // `NSApp.keyWindow?.makeFirstResponder(nil)` で WKWebView から AppKit 層の first
+            // responder を外す(#36: PR #33 の @FocusState 方式は AppKit makeFirstResponder に
+            // 翻訳されず無効だったため、AppKit 直叩きで奪う)。
+            // ScrollViewReader + .onChange で「選択が表示範囲外なら追従(範囲内なら no-op)」(#37)。
+            ScrollViewReader { proxy in
+                Group {
+                    if app.selectedTab == .recent {
+                        List(selection: $app.selection) {
+                            ForEach(app.recentFiles) { file in
+                                FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
+                                    .tag(Optional(SidebarSelection.file(file)))
+                                    .id(SidebarSelection.file(file))
+                                    .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                                    .listRowBackground(Color.clear)
+                                    .onTapGesture {
+                                        app.selection = .file(file)
+                                        yieldFirstResponderFromWebView()
+                                    }
+                            }
+                        }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                    } else {
+                        // dir 行(DisclosureGroup ラベル)クリックで List(selection:) が nil を書き込んで
+                        // 選択を失う macOS 挙動を防ぐため、nil 書込を無視する Binding を使う(M7 review #5)。
+                        // ただし dir 行自体に SidebarSelection.dir tag を付与した今(#32)、ユーザーが dir 行を
+                        // 明示クリックすれば setter には `.dir(...)` が入り、無視されず正しく書き込まれる。
+                        List(selection: Binding(
+                            get: { app.selection },
+                            set: { if let v = $0 { app.selection = v } }
+                        )) {
+                            TreeRowsView(nodes: app.tree)
+                        }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                     }
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .focused($listFocused)
-                .onTapGesture { listFocused = true }
-            } else {
-                // dir 行(DisclosureGroup ラベル)クリックで List(selection:) が nil を書き込んで
-                // 選択を失う macOS 挙動を防ぐため、nil 書込を無視する Binding を使う(M7 review #5)。
-                // ただし dir 行自体に SidebarSelection.dir tag を付与した今(#32)、ユーザーが dir 行を
-                // 明示クリックすれば setter には `.dir(...)` が入り、無視されず正しく書き込まれる。
-                List(selection: Binding(
-                    get: { app.selection },
-                    set: { if let v = $0 { app.selection = v } }
-                )) {
-                    TreeRowsView(nodes: app.tree)
+                .onChange(of: app.selection) { _, new in
+                    guard let new else { return }
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo(new, anchor: nil)
+                    }
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .focused($listFocused)
-                .onTapGesture { listFocused = true }
+                .onChange(of: app.selectedTab) { _, _ in
+                    guard let sel = app.selection else { return }
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo(sel, anchor: nil)
+                    }
+                }
             }
 
             // ── フッタ ──
@@ -187,6 +204,16 @@ struct SidebarView: View {
         }
     }
 
+    /// WKWebView(プレビュー)が key first responder を握ったままだと NSTableView の
+    /// firstClickValid=false 挙動でクリック・矢印キーが selection 更新まで届かない macOS 挙動を救う。
+    /// SwiftUI の `@FocusState` は AppKit 層の `makeFirstResponder` を呼ばないので、AppKit を
+    /// 直接叩く(#36)。`makeFirstResponder(nil)` は window レベルへ first responder を戻す効果で、
+    /// 結果として `installKeyMonitor` の `keyEventShouldYieldToFocus()` が false を返しキー操作が
+    /// ビューアキーとして扱われるようになる。
+    private func yieldFirstResponderFromWebView() {
+        NSApp.keyWindow?.makeFirstResponder(nil)
+    }
+
     /// システム設定の「プライバシーとセキュリティ > ファイルとフォルダ」を開く。
     /// ad-hoc アプリは TCC を自動付与できないため、できるのは再許可の導線提示まで。
     private func openFilesAndFoldersSettings() {
@@ -220,19 +247,32 @@ private struct TreeRowsView: View {
             if let file = node.file {
                 FileRowView(file: file, isSelected: app.selectedFile?.id == file.id)
                     .tag(Optional(SidebarSelection.file(file)))
+                    .id(SidebarSelection.file(file))
                     .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                     .listRowBackground(Color.clear)
+                    .onTapGesture {
+                        app.selection = .file(file)
+                        NSApp.keyWindow?.makeFirstResponder(nil)
+                    }
             } else {
                 // dir 行にも tag を付け、クリックで `.dir(id)` 選択になるようにする(#32)。
                 // DisclosureGroup の chevron(disclosure indicator)クリックは従来通り個別開閉が走る。
+                // label にだけ .onTapGesture を当てて selection を書き込む(DisclosureGroup の
+                // chevron クリックは label 外なので独立して開閉が走り続ける — #36)。
                 DisclosureGroup(isExpanded: expansion(of: node.id)) {
                     TreeRowsView(nodes: node.children ?? [])
                 } label: {
                     Text(node.name)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(isDirSelected(node.id) ? Theme.amber : Theme.textDim)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            app.selection = .dir(id: node.id)
+                            NSApp.keyWindow?.makeFirstResponder(nil)
+                        }
                 }
                 .tag(Optional(SidebarSelection.dir(id: node.id)))
+                .id(SidebarSelection.dir(id: node.id))
                 .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                 .listRowBackground(Color.clear)
             }
