@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox  // kVK_* keyCode 定数(マジックナンバー回避 — round-4 #6)
 import SwiftUI
 import WebKit
 
@@ -47,11 +48,12 @@ private func installKeyMonitor(_ app: AppState) -> Any? {
 
         // 矢印キー / Return / Enter は `charactersIgnoringModifiers` が非 ASCII 制御文字を返すため
         // `keyCode` で判定する(#32)。j/k / ↑↓ は等価、Return / Enter(numpad)は activate(dir 展開)。
+        // Carbon の `kVK_*` で名前付け(マジックナンバー回避・将来のキー追加時の typo 防止 — round-4 #6)。
         if !cmd && !optOrCtrl {
-            switch event.keyCode {
-            case 125: app.moveSelection(.down); return nil  // ↓
-            case 126: app.moveSelection(.up);   return nil  // ↑
-            case 36, 76: app.activateSelection(); return nil  // Return / Enter
+            switch Int(event.keyCode) {
+            case kVK_DownArrow: app.moveSelection(.down); return nil
+            case kVK_UpArrow:   app.moveSelection(.up);   return nil
+            case kVK_Return, kVK_ANSI_KeypadEnter: app.activateSelection(); return nil
             default: break
             }
         }

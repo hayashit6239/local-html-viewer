@@ -29,9 +29,11 @@ final class AppState {
     var selection: SidebarSelection?
 
     /// プレビュー対象ファイル(後方互換 computed)。`selection` から `.file` を抽出する。
-    /// 既存の `selectedFile = X` 形式の代入は setter で `selection = .file(X)` に橋渡し。
-    /// `.dir` 選択中は nil ではなく直前の `.file` を保つために、setter のみで `selection` を上書きする
-    /// (getter は常に `selection` の `.file` のみを返す = `.dir` 選択中は nil)。
+    /// 既存の `selectedFile = X` 形式の代入は setter で `selection = .file(X)` に橋渡し(後方互換 shim)。
+    /// `.dir` 選択中の preview 維持は `selectedFile` の getter/setter ではなく、`rescan` や
+    /// `recomputeTreeExpansion` 等の **呼び出し側が `selection == nil` で判定する経路**で実現する
+    /// (round-1 #1 / round-2 #1)。getter は `.dir` 選択中は nil を返し、preview が消えない理由は
+    /// WKWebView が前回 loadFileURL の結果を保持しているため(round-4 #3: コメント因果ループの修正)。
     var selectedFile: HTMLFile? {
         get {
             if case .file(let f) = selection { return f }
@@ -75,7 +77,14 @@ final class AppState {
                 case .recent:
                     selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
                 case .tree:
-                    selection = SelectionLogic.reconcile(previous: selection, in: visibleRows)
+                    // previous が `.file` の場合は leaf 版で reconcile して file → file の遷移を保つ
+                    // (行版で visible.first を返すと visibleRows 先頭の dir に倒れ preview が消える
+                    // — PR #33 round-4 #1)。previous が `.dir` の場合のみ行版で扱う。
+                    if case .file = selection {
+                        selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+                    } else {
+                        selection = SelectionLogic.reconcile(previous: selection, in: visibleRows)
+                    }
                 }
             }
             recomputeTreeExpansion()
@@ -164,8 +173,10 @@ final class AppState {
         TreeBuilder.visibleRows(tree, expanded: expandedDirs)
     }
 
-    /// 方向キー/j/k で選択を移動。RECENT は leaf のみ(従来通り fullOrder 補正で「隠れた選択」救済)、
-    /// TREE は **dir も含めた行列**(#32)で移動する。可視列が空のときは現選択を維持(プレビューを消さない)。
+    /// 方向キー/j/k で選択を移動。RECENT は leaf のみ、TREE は **dir も含めた行列**(#32)で移動する。
+    /// 可視列が空のときは現選択を維持(プレビューを消さない)。
+    /// RECENT は visible と fullOrder が同じ `recentFiles`(検索フィルタ後)で、leaf 版 `next` に
+    /// fullOrder を渡しているが visible⊂fullOrder の救済は実質作用しない(round-4 #4: 名目のみ)。
     func moveSelection(_ direction: SelectionDirection) {
         switch selectedTab {
         case .recent:
@@ -435,13 +446,17 @@ final class AppState {
             // 見ることで、round-1 #1 で塞いだ `selectedFile` 上書きと対称に、消えた `.dir` 選択も
             // 同じ経路で扱う(round-2 #1)。新ツリーは `result.files` 由来で構築して判定する。
             let newNodes = TreeBuilder.build(result.files)
+            // 全 case を明示分岐する(将来 `SidebarSelection` に新 case が増えたとき、`default`
+            // ですり抜けて stale クリーンアップが走らない事故を防ぐ — round-4 #5)。
             switch selection {
             case .file(let f) where !f.isExternal:
                 if !result.files.contains(where: { $0.path == f.path }) { selection = nil }
+            case .file:
+                break  // EXTERNAL ピンは走査結果に出ないため対象外(再走査で選択を奪わない)
             case .dir(let id):
                 if !TreeBuilder.containsDir(id, in: newNodes) { selection = nil }
-            default:
-                break  // EXTERNAL ピンは走査結果に出ないため対象外(再走査で選択を奪わない)
+            case .none:
+                break  // 未選択(直後の補充ロジックで recentFiles.first を立てる)
             }
             // 未選択時のみ最新ファイルを補充する。`selectedFile` getter は `.dir` 選択中も nil を
             // 返すため、ここを `selectedFile == nil` で見ると dir 選択を上書きしてしまう。`selection`
@@ -479,7 +494,14 @@ final class AppState {
                     case .tree:
                         if let sel = selection,
                            !visibleRows.contains(where: { SelectionLogic.matches($0, sel) }) {
-                            selection = SelectionLogic.reconcile(previous: selection, in: visibleRows)
+                            // searchText.didSet と同じ非対称対策: .file 選択は leaf 版で
+                            // file → file の遷移を保つ(行版で visibleRows.first を返すと dir
+                            // に倒れ preview が消える — PR #33 round-4 #1 と同根)。
+                            if case .file = selection {
+                                selectedFile = SelectionLogic.reconcile(previous: selectedFile, in: visibleLeaves)
+                            } else {
+                                selection = SelectionLogic.reconcile(previous: selection, in: visibleRows)
+                            }
                             recomputeTreeExpansion()
                         }
                     }

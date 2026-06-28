@@ -81,7 +81,9 @@ public enum SidebarSelection: Hashable, Sendable {
 
 /// TREE タブの可視行(#32)。`visibleRows` が展開済み dir 配下を depth-first に平坦化した結果で、
 /// 方向キーでの行移動(file と dir を同列に舐める)に使う。
+/// インデント表示は SwiftUI のネイティブ階層描画(`DisclosureGroup`)に任せるため、行ベース
+/// 操作には id のみで十分(round-4 #2 で `depth` を YAGNI として削除)。
 public enum TreeRow: Hashable, Sendable {
     case file(HTMLFile)
-    case dir(id: String, depth: Int)
+    case dir(id: String)
 }

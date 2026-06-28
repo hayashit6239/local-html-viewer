@@ -143,23 +143,23 @@ struct TreeBuilderTests {
         #expect(TreeBuilder.visibleRows([], expanded: []).isEmpty)
     }
 
-    @Test("visibleRows: 全展開で dir/leaf を depth-first 順に平坦化(depth 付き)")
+    @Test("visibleRows: 全展開で dir/leaf を depth-first 順に平坦化")
     func visibleRowsFullyExpanded() {
         let files = [f(root: "/R", rel: "a.html"), f(root: "/R", rel: "sub/b.html")]
         let tree = TreeBuilder.build(files)
         let rows = TreeBuilder.visibleRows(tree, expanded: ["/R/", "/R/sub/"])
-        // 期待: [dir "/R/" depth=0, dir "/R/sub/" depth=1, file b.html, file a.html]
+        // 期待: [dir "/R/", dir "/R/sub/", file b.html, file a.html]
         // (build は dir 先・leaf 後、各々名前昇順)
         guard rows.count == 4 else {
-            #expect(rows.count == 4); return
+            #expect(rows.count == 4, "rows=\(rows)"); return
         }
-        guard case .dir(let id0, let d0) = rows[0] else { #expect(Bool(false)); return }
-        #expect(id0 == "/R/" && d0 == 0)
-        guard case .dir(let id1, let d1) = rows[1] else { #expect(Bool(false)); return }
-        #expect(id1 == "/R/sub/" && d1 == 1)
-        guard case .file(let bFile) = rows[2] else { #expect(Bool(false)); return }
+        guard case .dir(let id0) = rows[0] else { #expect(Bool(false), "rows[0]=\(rows[0])"); return }
+        #expect(id0 == "/R/")
+        guard case .dir(let id1) = rows[1] else { #expect(Bool(false), "rows[1]=\(rows[1])"); return }
+        #expect(id1 == "/R/sub/")
+        guard case .file(let bFile) = rows[2] else { #expect(Bool(false), "rows[2]=\(rows[2])"); return }
         #expect(bFile.name == "b.html")
-        guard case .file(let aFile) = rows[3] else { #expect(Bool(false)); return }
+        guard case .file(let aFile) = rows[3] else { #expect(Bool(false), "rows[3]=\(rows[3])"); return }
         #expect(aFile.name == "a.html")
     }
 
@@ -169,12 +169,12 @@ struct TreeBuilderTests {
         let tree = TreeBuilder.build(files)
         let rows = TreeBuilder.visibleRows(tree, expanded: ["/R/"])
         // 期待: [dir "/R/", dir "/R/sub/"(折りたたみ中で配下不可視), file a.html]
-        guard rows.count == 3 else { #expect(rows.count == 3); return }
-        guard case .dir(let id0, _) = rows[0] else { #expect(Bool(false)); return }
+        guard rows.count == 3 else { #expect(rows.count == 3, "rows=\(rows)"); return }
+        guard case .dir(let id0) = rows[0] else { #expect(Bool(false), "rows[0]=\(rows[0])"); return }
         #expect(id0 == "/R/")
-        guard case .dir(let id1, let d1) = rows[1] else { #expect(Bool(false)); return }
-        #expect(id1 == "/R/sub/" && d1 == 1)  // dir 行は出るが子は出ない
-        guard case .file(let aFile) = rows[2] else { #expect(Bool(false)); return }
+        guard case .dir(let id1) = rows[1] else { #expect(Bool(false), "rows[1]=\(rows[1])"); return }
+        #expect(id1 == "/R/sub/")  // dir 行は出るが子は出ない
+        guard case .file(let aFile) = rows[2] else { #expect(Bool(false), "rows[2]=\(rows[2])"); return }
         #expect(aFile.name == "a.html")
     }
 
@@ -184,9 +184,11 @@ struct TreeBuilderTests {
         let tree = TreeBuilder.build(files)
         let rows = TreeBuilder.visibleRows(tree, expanded: [])
         // 期待: [dir "/R/"](ルート dir 自身は常に表示、配下は折りたたみで非表示)
-        #expect(rows.count == 1)
-        guard case .dir(let id0, let d0) = rows[0] else { #expect(Bool(false)); return }
-        #expect(id0 == "/R/" && d0 == 0)
+        #expect(rows.count == 1, "rows=\(rows)")
+        guard case .dir(let id0) = rows.first ?? .file(f(root: "/R", rel: "a.html")) else {
+            #expect(Bool(false), "rows[0]=\(String(describing: rows.first))"); return
+        }
+        #expect(id0 == "/R/")
     }
 
     @Test("ancestors(ofDir:): dir 自身は含まず祖先 dir のみ・ルートまで再帰(#33 round-2 #2)")

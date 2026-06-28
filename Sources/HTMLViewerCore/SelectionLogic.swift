@@ -96,7 +96,7 @@ public enum SelectionLogic {
     private static func selection(of row: TreeRow) -> SidebarSelection {
         switch row {
         case .file(let file): return .file(file)
-        case .dir(let id, _): return .dir(id: id)
+        case .dir(let id): return .dir(id: id)
         }
     }
 
@@ -106,7 +106,7 @@ public enum SelectionLogic {
     public static func matches(_ row: TreeRow, _ selection: SidebarSelection) -> Bool {
         switch (row, selection) {
         case (.file(let f), .file(let g)): return f.id == g.id
-        case (.dir(let i, _), .dir(let j)): return i == j
+        case (.dir(let i), .dir(let j)): return i == j
         default: return false
         }
     }

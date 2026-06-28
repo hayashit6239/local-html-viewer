@@ -89,8 +89,8 @@ struct SelectionLogicTests {
     private func rowsExample() -> [TreeRow] {
         // 模式図: [dir "/R/", dir "/R/sub/", file b, file a]
         [
-            .dir(id: "/R/", depth: 0),
-            .dir(id: "/R/sub/", depth: 1),
+            .dir(id: "/R/"),
+            .dir(id: "/R/sub/"),
             .file(f("b")),
             .file(f("a")),
         ]
@@ -109,8 +109,11 @@ struct SelectionLogicTests {
         #expect(SelectionLogic.nextRow(after: nil, in: rows, direction: .up) == .file(f("a")))
     }
 
-    @Test("nextRow: dir/file 混在で隣へ、端クランプ")
-    func nextRowMixedClamp() {
+    // round-4 #7: 1 @Test に束ねていた 5 観点を「隣接遷移(dir↔dir / dir↔file)」と「端クランプ」に分離。
+    // Swift Testing の `#expect` は失敗継続だが、@Test 名で観点が分かる方が診断が早い。
+
+    @Test("nextRow: dir/file 混在で隣接遷移(dir↔dir / dir↔file)")
+    func nextRowAdjacentMixed() {
         let rows = rowsExample()
         // dir "/R/" → 次は dir "/R/sub/"
         #expect(
@@ -124,6 +127,11 @@ struct SelectionLogicTests {
         #expect(
             SelectionLogic.nextRow(after: .file(f("b")), in: rows, direction: .up)
                 == .dir(id: "/R/sub/"))
+    }
+
+    @Test("nextRow: 端クランプ(末尾 down / 先頭 up は同位置)")
+    func nextRowClamp() {
+        let rows = rowsExample()
         // 末尾 file a で down → クランプ(同位置)
         #expect(
             SelectionLogic.nextRow(after: .file(f("a")), in: rows, direction: .down)
@@ -132,6 +140,16 @@ struct SelectionLogicTests {
         #expect(
             SelectionLogic.nextRow(after: .dir(id: "/R/"), in: rows, direction: .up)
                 == .dir(id: "/R/"))
+    }
+
+    @Test("reconcile(行版): previous=.file が visibleRows に無いと先頭(dir に倒れうる)を返す")
+    func reconcileRowMayFallToDir() {
+        // 行版 reconcile は呼び出し側で「previous が .file の場合は leaf 版に分岐」する責務がある
+        // ことを Core 側で文書化するための回帰テスト(AppState 側で round-4 #1 として遵守)。
+        let rows = rowsExample()  // [dir "/R/", dir "/R/sub/", file b, file a]
+        // 存在しない file を previous にすると visibleRows.first(=dir "/R/")が返る
+        #expect(
+            SelectionLogic.reconcile(previous: .file(f("z")), in: rows) == .dir(id: "/R/"))
     }
 
     @Test("nextRow: visible に無い選択(折りたたみ等で消えた dir)は端から開始")
@@ -172,12 +190,12 @@ struct SelectionLogicTests {
         let fa = f("a")
         // 同 case 一致
         #expect(SelectionLogic.matches(.file(fa), .file(fa)))
-        #expect(SelectionLogic.matches(.dir(id: "/R/", depth: 0), .dir(id: "/R/")))
+        #expect(SelectionLogic.matches(.dir(id: "/R/"), .dir(id: "/R/")))
         // 同 case 不一致
         #expect(!SelectionLogic.matches(.file(fa), .file(f("b"))))
-        #expect(!SelectionLogic.matches(.dir(id: "/R/", depth: 0), .dir(id: "/Q/")))
+        #expect(!SelectionLogic.matches(.dir(id: "/R/"), .dir(id: "/Q/")))
         // case 違い(file ↔ dir / dir ↔ file)は常に false
         #expect(!SelectionLogic.matches(.file(fa), .dir(id: "/R/")))
-        #expect(!SelectionLogic.matches(.dir(id: "/R/", depth: 0), .file(fa)))
+        #expect(!SelectionLogic.matches(.dir(id: "/R/"), .file(fa)))
     }
 }
